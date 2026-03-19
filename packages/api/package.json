@@ -1,0 +1,22 @@
+{
+  "name": "lagoon-cockpit-api",
+  "version": "1.0.0",
+  "description": "Lightweight Docker management API for Lagoon Cockpit",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.7.0",
+    "expo-server-sdk": "^3.13.0",
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

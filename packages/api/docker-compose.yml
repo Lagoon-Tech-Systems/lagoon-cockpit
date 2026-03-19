@@ -1,0 +1,35 @@
+services:
+  cockpit-api:
+    build: .
+    container_name: cockpit_api
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - cockpit_data:/app/data
+    # Uncomment and set your reverse proxy network:
+    # networks:
+    #   - your_proxy_network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  cockpit_data:
+
+# Uncomment to join an external reverse proxy network:
+# networks:
+#   your_proxy_network:
+#     external: true

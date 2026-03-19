@@ -1,0 +1,11 @@
+{
+  "name": "lagoon-cockpit",
+  "version": "1.0.0",
+  "description": "Open-source mobile DevOps dashboard for Docker infrastructure",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/api",
+    "packages/app"
+  ]
+}

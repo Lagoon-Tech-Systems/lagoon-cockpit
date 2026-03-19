@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+.env
+docker-compose.override.yml
+*.db
+*.db-wal
+*.db-shm
+.expo/
+.DS_Store
+*.tsbuildinfo
+demo/*.json

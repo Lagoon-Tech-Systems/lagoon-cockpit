@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Lagoon Cockpit",
+    "slug": "lagoon-cockpit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "lagoon-cockpit",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.lagoontechsystems.cockpit",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.lagoontechsystems.cockpit",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D0D"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      [
+        "expo-notifications",
+        {
+          "color": "#0D0D0D"
+        }
+      ]
+    ]
+  }
+}
