@@ -7,8 +7,8 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
     Overview: '\u{1F4CA}',
     Containers: '\u{1F4E6}',
     Stacks: '\u{1F5C2}',
-    Status: '\u{1F50D}',
     Alerts: '\u{1F514}',
+    Manage: '\u{2699}',
   };
   return (
     <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
@@ -18,7 +18,6 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
 }
 
 export default function TabLayout() {
-  // Initialize SSE connection when tabs are mounted
   useSSE();
 
   return (
@@ -60,17 +59,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="status"
-        options={{
-          title: 'Status',
-          tabBarIcon: ({ focused }) => <TabIcon label="Status" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
         name="alerts"
         options={{
           title: 'Alerts',
           tabBarIcon: ({ focused }) => <TabIcon label="Alerts" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="manage"
+        options={{
+          title: 'Manage',
+          tabBarIcon: ({ focused }) => <TabIcon label="Manage" focused={focused} />,
+        }}
+      />
+      {/* Hide status tab from tab bar but keep it accessible via direct navigation */}
+      <Tabs.Screen
+        name="status"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

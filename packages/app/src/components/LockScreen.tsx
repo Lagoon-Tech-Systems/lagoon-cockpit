@@ -3,14 +3,19 @@ import { useAuthStore } from '../stores/authStore';
 import { useEffect, useState } from 'react';
 
 export default function LockScreen() {
-  const { unlock, isLoading, checkBiometricSupport } = useAuthStore();
+  const { unlock, isLoading, checkBiometricSupport, bypassUnlock } = useAuthStore();
   const [hasBiometrics, setHasBiometrics] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     checkBiometricSupport().then((supported) => {
       setHasBiometrics(supported);
-      if (supported) handleUnlock();
+      if (supported) {
+        handleUnlock();
+      } else {
+        // No biometrics available — auto-unlock so the user is not stuck
+        bypassUnlock();
+      }
     });
   }, []);
 

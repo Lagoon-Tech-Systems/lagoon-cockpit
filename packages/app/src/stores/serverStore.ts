@@ -1,5 +1,22 @@
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+
+// Web fallback: SecureStore doesn't work in browser, use localStorage
+const storage = {
+  getItem: async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') return localStorage.getItem(key);
+    return SecureStore.getItemAsync(key);
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') { localStorage.setItem(key, value); return; }
+    return SecureStore.setItemAsync(key, value);
+  },
+  deleteItem: async (key: string): Promise<void> => {
+    if (Platform.OS === 'web') { localStorage.removeItem(key); return; }
+    return SecureStore.deleteItemAsync(key);
+  },
+};
 
 const PROFILES_KEY = 'cockpit_server_profiles';
 const credentialKey = (id: string) => `cockpit_cred_${id}`;
@@ -45,13 +62,13 @@ interface ServerState {
 }
 
 async function readProfiles(): Promise<ServerProfile[]> {
-  const raw = await SecureStore.getItemAsync(PROFILES_KEY);
+  const raw = await storage.getItem(PROFILES_KEY);
   if (!raw) return [];
   return JSON.parse(raw) as ServerProfile[];
 }
 
 async function writeProfiles(profiles: ServerProfile[]): Promise<void> {
-  await SecureStore.setItemAsync(PROFILES_KEY, JSON.stringify(profiles));
+  await storage.setItem(PROFILES_KEY, JSON.stringify(profiles));
 }
 
 export const useServerStore = create<ServerState>((set, get) => ({
@@ -70,7 +87,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   addProfile: async ({ name, url, authMode }) => {
     const id = generateId();
-    const profile: ServerProfile = { id, name, url, authMode, createdAt: Date.now() };
+    const cleanUrl = url.replace(/\/+$/, ''); // strip trailing slashes
+    const profile: ServerProfile = { id, name, url: cleanUrl, authMode, createdAt: Date.now() };
     const existing = await readProfiles();
     const updated = [...existing, profile];
     await writeProfiles(updated);
@@ -78,8 +96,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
   },
 
   removeProfile: async (id) => {
-    await SecureStore.deleteItemAsync(credentialKey(id));
-    await SecureStore.deleteItemAsync(REFRESH_KEY(id));
+    await storage.deleteItem(credentialKey(id));
+    await storage.deleteItem(REFRESH_KEY(id));
     const existing = await readProfiles();
     const updated = existing.filter((p) => p.id !== id);
     await writeProfiles(updated);
@@ -109,7 +127,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
       if (!profile) throw new Error('Profile not found');
 
       // Store credential for future use
-      await SecureStore.setItemAsync(credentialKey(profileId), credential);
+      await storage.setItem(credentialKey(profileId), credential);
 
       const endpoint = profile.authMode === 'key' ? '/auth/token' : '/auth/login';
       const body =
@@ -117,11 +135,16 @@ export const useServerStore = create<ServerState>((set, get) => ({
           ? { apiKey: credential }
           : { email: extra?.email, password: credential };
 
-      const res = await fetch(`${profile.url}${endpoint}`, {
+      const fetchUrl = `${profile.url}${endpoint}`;
+      console.log(`[COCKPIT] authenticate: POST ${fetchUrl}`);
+
+      const res = await fetch(fetchUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+
+      console.log(`[COCKPIT] authenticate response: ${res.status} ${res.statusText}`);
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -130,7 +153,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
       const data = await res.json();
       if (data.refreshToken) {
-        await SecureStore.setItemAsync(REFRESH_KEY(profileId), data.refreshToken);
+        await storage.setItem(REFRESH_KEY(profileId), data.refreshToken);
       }
 
       set({
@@ -154,7 +177,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const profile = profiles.find((p) => p.id === activeProfileId);
     if (!profile) throw new Error('Profile not found');
 
-    const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY(activeProfileId));
+    const refreshToken = await storage.getItem(REFRESH_KEY(activeProfileId));
     if (!refreshToken) throw new Error('No refresh token');
 
     const res = await fetch(`${profile.url}/auth/refresh`, {
@@ -164,14 +187,14 @@ export const useServerStore = create<ServerState>((set, get) => ({
     });
 
     if (!res.ok) {
-      await SecureStore.deleteItemAsync(REFRESH_KEY(activeProfileId));
+      await storage.deleteItem(REFRESH_KEY(activeProfileId));
       set({ accessToken: null });
       throw new Error('Refresh failed');
     }
 
     const data = await res.json();
     if (data.refreshToken) {
-      await SecureStore.setItemAsync(REFRESH_KEY(activeProfileId), data.refreshToken);
+      await storage.setItem(REFRESH_KEY(activeProfileId), data.refreshToken);
     }
     set({ accessToken: data.accessToken });
   },

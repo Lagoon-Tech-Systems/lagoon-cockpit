@@ -1,6 +1,8 @@
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
 
 export default function ServerSelectScreen() {
@@ -21,17 +23,20 @@ export default function ServerSelectScreen() {
 
   const handleConnect = async (profile: ServerProfile) => {
     setActiveProfile(profile.id);
-    // Try to use stored credential first, or prompt
     try {
       setConnecting(true);
-      const storedCred = credential; // User must enter credential on first connect
+      // Try stored credential from SecureStore first
+      const storedCred = Platform.OS === 'web'
+        ? localStorage.getItem(`cockpit_cred_${profile.id}`)
+        : await SecureStore.getItemAsync(`cockpit_cred_${profile.id}`);
       if (!storedCred) {
-        Alert.alert('Enter credentials', 'Please add a new server with credentials.');
+        Alert.alert('No Credentials', 'Long-press to remove this profile, then add it again with your API key.');
         return;
       }
       await authenticate(profile.id, storedCred, { email });
       router.replace('/(tabs)/overview');
     } catch (err) {
+      console.error('[COCKPIT] handleConnect failed:', err);
       Alert.alert('Connection Failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setConnecting(false);
@@ -62,6 +67,7 @@ export default function ServerSelectScreen() {
       setEmail('');
       router.replace('/(tabs)/overview');
     } catch (err) {
+      console.error('[COCKPIT] handleAdd failed:', err);
       Alert.alert('Failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setConnecting(false);

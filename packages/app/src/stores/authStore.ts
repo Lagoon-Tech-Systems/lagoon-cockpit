@@ -6,6 +6,7 @@ interface AuthState {
   isLoading: boolean;
   unlock: () => Promise<boolean>;
   lock: () => void;
+  bypassUnlock: () => void;
   checkBiometricSupport: () => Promise<boolean>;
 }
 
@@ -29,6 +30,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   lock: () => {
     set({ isUnlocked: false });
+  },
+
+  bypassUnlock: () => {
+    set({ isUnlocked: true });
   },
 
   checkBiometricSupport: async () => {

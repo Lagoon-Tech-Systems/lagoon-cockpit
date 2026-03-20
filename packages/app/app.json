@@ -14,7 +14,12 @@
       "package": "com.lagoontechsystems.cockpit",
       "adaptiveIcon": {
         "backgroundColor": "#0D0D0D"
-      }
+      },
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -26,6 +31,13 @@
           "color": "#0D0D0D"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4254fbcc-5b16-4aab-b308-6c45db806390"
+      }
+    },
+    "owner": "bigabou007-dev"
   }
 }
