@@ -22,9 +22,23 @@ function init(database) {
   `);
 }
 
+// SSRF protection: block internal/private IPs
+const BLOCKED_HOSTS = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|localhost|::1|\[::1\])/i;
+
+function validateWebhookUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error("Invalid URL"); }
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("URL must be http or https");
+  if (BLOCKED_HOSTS.test(parsed.hostname)) throw new Error("URL cannot target private/internal addresses");
+  return parsed;
+}
+
 /** Create a webhook */
 function createWebhook(name, url, events = "container.down", headers = {}) {
   if (!db) throw new Error("Webhooks not initialized");
+  validateWebhookUrl(url);
+  const count = db.prepare("SELECT COUNT(*) as c FROM webhooks").get().c;
+  if (count >= 50) throw new Error("Maximum 50 webhooks allowed");
   const result = db.prepare(
     "INSERT INTO webhooks (name, url, events, headers) VALUES (?, ?, ?, ?)"
   ).run(name, url, events, JSON.stringify(headers));

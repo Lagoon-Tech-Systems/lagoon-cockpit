@@ -1,16 +1,24 @@
 const { dockerAPI } = require("./client");
 
 /**
- * System-wide prune: containers, images, volumes, networks.
- * Returns bytes reclaimed from each category.
+ * System-wide prune: containers, images, networks.
+ * Volumes are NOT pruned by default (data loss risk).
+ * @param {boolean} includeVolumes - Explicitly opt-in to volume prune
  */
-async function systemPrune() {
-  const [containerPrune, imagePrune, volumePrune, networkPrune] = await Promise.all([
+async function systemPrune(includeVolumes = false) {
+  const promises = [
     dockerAPI("POST", "/containers/prune").catch(() => ({})),
     dockerAPI("POST", "/images/prune").catch(() => ({})),
-    dockerAPI("POST", "/volumes/prune").catch(() => ({})),
     dockerAPI("POST", "/networks/prune").catch(() => ({})),
-  ]);
+  ];
+
+  if (includeVolumes) {
+    promises.push(dockerAPI("POST", "/volumes/prune").catch(() => ({})));
+  }
+
+  const results = await Promise.all(promises);
+  const [containerPrune, imagePrune, networkPrune] = results;
+  const volumePrune = includeVolumes ? results[3] : {};
 
   return {
     containers: {
@@ -22,8 +30,9 @@ async function systemPrune() {
       spaceReclaimed: imagePrune.SpaceReclaimed || 0,
     },
     volumes: {
-      deleted: volumePrune.VolumesDeleted || [],
-      spaceReclaimed: volumePrune.SpaceReclaimed || 0,
+      deleted: includeVolumes ? (volumePrune.VolumesDeleted || []) : [],
+      spaceReclaimed: includeVolumes ? (volumePrune.SpaceReclaimed || 0) : 0,
+      skipped: !includeVolumes,
     },
     networks: {
       deleted: networkPrune.NetworksDeleted || [],
@@ -31,7 +40,7 @@ async function systemPrune() {
     totalReclaimed:
       (containerPrune.SpaceReclaimed || 0) +
       (imagePrune.SpaceReclaimed || 0) +
-      (volumePrune.SpaceReclaimed || 0),
+      (includeVolumes ? (volumePrune.SpaceReclaimed || 0) : 0),
   };
 }
 

@@ -43,6 +43,8 @@ function createRule(name, metric, operator, threshold, durationSeconds = 0) {
   if (!db) throw new Error("Alert engine not initialized");
   const validMetrics = ["cpu_percent", "memory_percent", "disk_percent", "load_1", "container_stopped"];
   if (!validMetrics.includes(metric)) throw new Error(`Invalid metric: ${metric}`);
+  const count = db.prepare("SELECT COUNT(*) as c FROM alert_rules").get().c;
+  if (count >= 100) throw new Error("Maximum 100 alert rules allowed");
 
   const result = db.prepare(
     "INSERT INTO alert_rules (name, metric, operator, threshold, duration_seconds) VALUES (?, ?, ?, ?, ?)"
@@ -103,25 +105,26 @@ function evaluateRules(metrics, containerStats) {
       const now = Date.now();
 
       if (!existing) {
-        activeAlerts.set(rule.id, { triggeredAt: now, count: 1 });
-      } else {
-        existing.count++;
+        // First time threshold is breached — start tracking
+        activeAlerts.set(rule.id, { triggeredAt: now, notifiedAt: 0 });
       }
 
-      // Check if duration threshold is met
-      const elapsed = existing ? (now - existing.triggeredAt) / 1000 : 0;
-      if (elapsed >= rule.duration_seconds || !existing) {
-        // Only fire once per sustained alert (cooldown: 15 min)
-        if (!existing || existing.count === 1 || elapsed < rule.duration_seconds + 1) {
-          const message = `${rule.name}: ${rule.metric} is ${value} (threshold: ${rule.operator} ${rule.threshold})`;
+      const state = activeAlerts.get(rule.id);
+      const elapsed = (now - state.triggeredAt) / 1000;
 
-          db.prepare(
-            "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message) VALUES (?, ?, ?, ?, ?, ?)"
-          ).run(rule.id, rule.name, rule.metric, value, rule.threshold, message);
+      // Check if duration threshold is met and cooldown has passed (15 min)
+      const COOLDOWN_MS = 15 * 60 * 1000;
+      if (elapsed >= rule.duration_seconds && (now - state.notifiedAt) >= COOLDOWN_MS) {
+        const message = `${rule.name}: ${rule.metric} is ${value} (threshold: ${rule.operator} ${rule.threshold})`;
 
-          if (pushNotify) {
-            pushNotify(`Alert: ${rule.name}`, message, { type: "alert_rule", ruleId: rule.id }).catch(() => {});
-          }
+        db.prepare(
+          "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message) VALUES (?, ?, ?, ?, ?, ?)"
+        ).run(rule.id, rule.name, rule.metric, value, rule.threshold, message);
+
+        state.notifiedAt = now;
+
+        if (pushNotify) {
+          pushNotify(`Alert: ${rule.name}`, message, { type: "alert_rule", ruleId: rule.id }).catch(() => {});
         }
       }
     } else {

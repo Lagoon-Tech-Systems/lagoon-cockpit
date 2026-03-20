@@ -59,7 +59,7 @@ const commands = {
       const serverName = name || data.serverName || "Server";
       const config = loadConfig();
       const existing = config.servers.findIndex((s) => s.url === url);
-      const entry = { name: serverName, url: url.replace(/\/+$/, ""), token: data.accessToken, refreshToken: data.refreshToken, apiKey, role: data.role };
+      const entry = { name: serverName, url: url.replace(/\/+$/, ""), token: data.accessToken, refreshToken: data.refreshToken, role: data.role };
       if (existing >= 0) config.servers[existing] = entry;
       else config.servers.push(entry);
       config.active = serverName;

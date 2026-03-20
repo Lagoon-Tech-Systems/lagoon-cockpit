@@ -1,47 +1,59 @@
 const { dockerAPI } = require("./client");
 
-// Allowed commands whitelist — prevents arbitrary code execution
+// Strict whitelist: EXACT command strings only — no prefix matching, no arguments
 const ALLOWED_COMMANDS = [
-  // Health checks
-  "pg_isready", "redis-cli ping", "redis-cli info", "nginx -t",
-  "mysql -e 'SELECT 1'", "mongosh --eval 'db.runCommand({ping:1})'",
-  // Diagnostics
-  "whoami", "hostname", "date", "uptime", "df -h", "free -m",
-  "ps aux", "top -bn1", "cat /etc/os-release", "env",
-  "ls", "ls -la", "cat", "head", "tail", "wc -l",
-  // Network
-  "ip addr", "ip route", "netstat -tlnp", "ss -tlnp",
-  "curl -s", "wget -qO-", "nslookup", "dig", "ping -c 1",
+  // Health checks (exact)
+  "pg_isready",
+  "redis-cli ping",
+  "redis-cli info",
+  "nginx -t",
+  // Diagnostics (exact, safe)
+  "whoami",
+  "hostname",
+  "date",
+  "uptime",
+  "df -h",
+  "free -m",
+  "ps aux",
+  "top -bn1",
+  "cat /etc/os-release",
+  "ls -la /",
+  "ip addr",
+  "ip route",
+  "netstat -tlnp",
+  "ss -tlnp",
 ];
+
+// Block shell metacharacters that enable injection
+const SHELL_METACHAR_RE = /[`$|;&><()\[\]{}!\\'\n\r]/;
 
 /**
  * Check if a command is allowed.
- * Allows exact matches or prefix matches from the whitelist.
+ * EXACT match only — no prefix matching, no argument appending.
  */
 function isCommandAllowed(cmd) {
   const trimmed = cmd.trim();
-  return ALLOWED_COMMANDS.some((allowed) =>
-    trimmed === allowed || trimmed.startsWith(allowed + " ")
-  );
+  // Block shell metacharacters regardless of whitelist
+  if (SHELL_METACHAR_RE.test(trimmed)) return false;
+  // Exact match only
+  return ALLOWED_COMMANDS.includes(trimmed);
 }
 
 /**
  * Execute a command in a container.
- * @param {string} containerId
- * @param {string} command - The command string to run
- * @returns {Promise<{ output: string, exitCode: number }>}
+ * Uses argv array execution — NOT sh -c (prevents shell injection).
  */
 async function execInContainer(containerId, command) {
-  // Create exec instance
+  // Split into argv (simple space split — no shell interpretation)
+  const argv = command.trim().split(/\s+/);
+
   const execCreate = await dockerAPI("POST", `/containers/${containerId}/exec`, {
     AttachStdout: true,
     AttachStderr: true,
-    Cmd: ["sh", "-c", command],
+    Cmd: argv, // Direct argv, NOT ["sh", "-c", command]
   });
 
   const execId = execCreate.Id;
-
-  // Start exec and get output
   const res = await dockerAPI("POST", `/exec/${execId}/start`, { Detach: false, Tty: false }, { stream: true });
 
   return new Promise((resolve, reject) => {
@@ -49,12 +61,10 @@ async function execInContainer(containerId, command) {
     res.on("data", (chunk) => chunks.push(chunk));
     res.on("end", async () => {
       const buf = Buffer.concat(chunks);
-      // Parse Docker multiplex stream (8-byte header per frame)
       const lines = [];
       let offset = 0;
       while (offset < buf.length) {
         if (offset + 8 > buf.length) {
-          // Remaining data without header — treat as raw output
           lines.push(buf.subarray(offset).toString("utf8"));
           break;
         }
@@ -68,7 +78,6 @@ async function execInContainer(containerId, command) {
         offset += 8 + size;
       }
 
-      // Get exit code
       let exitCode = 0;
       try {
         const inspect = await dockerAPI("GET", `/exec/${execId}/json`);
@@ -81,11 +90,9 @@ async function execInContainer(containerId, command) {
   });
 }
 
-/**
- * Get running processes in a container (docker top)
- */
+/** Get running processes in a container (docker top) */
 async function getContainerTop(containerId) {
   return dockerAPI("GET", `/containers/${containerId}/top`);
 }
 
-module.exports = { execInContainer, isCommandAllowed, getContainerTop };
+module.exports = { execInContainer, isCommandAllowed, getContainerTop, ALLOWED_COMMANDS };

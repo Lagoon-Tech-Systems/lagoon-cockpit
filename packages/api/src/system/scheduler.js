@@ -129,6 +129,8 @@ function computeNextRun(expression) {
 
 // ── Timer Management ────────────────────────────────────────
 
+const lastFiredMinute = new Map(); // scheduleId -> "YYYY-MM-DD HH:mm"
+
 function startTimer(schedule) {
   if (timers.has(schedule.id)) {
     clearInterval(timers.get(schedule.id));
@@ -137,10 +139,13 @@ function startTimer(schedule) {
   // Check every 30 seconds for cron match
   const intervalId = setInterval(() => {
     const now = new Date();
-    // Only fire if seconds are < 30 (avoid double-firing within same minute)
-    if (now.getSeconds() >= 30) return;
 
     if (cronMatches(schedule.cron_expression, now)) {
+      // Deduplicate: only fire once per minute window
+      const minuteKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()} ${now.getHours()}:${now.getMinutes()}`;
+      if (lastFiredMinute.get(schedule.id) === minuteKey) return;
+      lastFiredMinute.set(schedule.id, minuteKey);
+
       executeAction(schedule);
     }
   }, 30000);
@@ -222,6 +227,12 @@ function createSchedule(name, containerId, containerName, action, cronExpression
   }
   if (!["start", "stop", "restart"].includes(action)) {
     throw new Error("action must be start, stop, or restart");
+  }
+  const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
+  if (!CONTAINER_ID_RE.test(containerId)) throw new Error("Invalid container ID format");
+  if (db) {
+    const count = db.prepare("SELECT COUNT(*) as c FROM scheduled_actions").get().c;
+    if (count >= 50) throw new Error("Maximum 50 schedules allowed");
   }
 
   // Validate cron expression (5 fields)

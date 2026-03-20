@@ -81,6 +81,23 @@ function validateStackName(req, res, next) {
   next();
 }
 
+const VOLUME_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
+const IMAGE_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.:\/@-]{0,255}$/;
+
+function validateVolumeName(req, res, next) {
+  if (!VOLUME_NAME_RE.test(req.params.name)) {
+    return res.status(400).json({ error: "Invalid volume name" });
+  }
+  next();
+}
+
+function validateImageId(req, res, next) {
+  if (!IMAGE_ID_RE.test(req.params.id) || req.params.id.includes("..")) {
+    return res.status(400).json({ error: "Invalid image ID" });
+  }
+  next();
+}
+
 function blockSelfAction(req, res, next) {
   if (req.params.id === SELF_HOSTNAME) {
     return res.status(403).json({ error: "Cannot perform this action on the Cockpit API container" });
@@ -512,7 +529,14 @@ app.get("/api/containers/:id/logs/search", requireAuth, validateContainerId, asy
 
     const lines = await containers.getContainerLogs(req.params.id, { tail: 1000 });
     const contextLines = Math.min(parseInt(context, 10) || 2, 5);
-    const pattern = regex === "true" ? new RegExp(q, "i") : null;
+    let pattern = null;
+    if (regex === "true") {
+      try {
+        pattern = new RegExp(q, "i");
+      } catch (regexErr) {
+        return res.status(400).json({ error: "Invalid regex pattern" });
+      }
+    }
 
     const matches = [];
     for (let i = 0; i < lines.length; i++) {
@@ -611,7 +635,7 @@ app.get("/api/volumes", requireAuth, async (_req, res) => {
   }
 });
 
-app.delete("/api/volumes/:name", requireAuth, requireRole("admin"), async (req, res) => {
+app.delete("/api/volumes/:name", requireAuth, requireRole("admin"), validateVolumeName, async (req, res) => {
   try {
     await volumes.removeVolume(req.params.name);
     auditLog(req.user.id, "volume.remove", req.params.name);
@@ -631,7 +655,7 @@ app.get("/api/images", requireAuth, async (_req, res) => {
   }
 });
 
-app.delete("/api/images/:id", requireAuth, requireRole("admin"), async (req, res) => {
+app.delete("/api/images/:id", requireAuth, requireRole("admin"), validateImageId, async (req, res) => {
   try {
     const result = await images.removeImage(req.params.id);
     auditLog(req.user.id, "image.remove", req.params.id);
@@ -654,7 +678,7 @@ app.post("/api/images/prune", requireAuth, requireRole("admin"), async (_req, re
 // ── System Prune ─────────────────────────────────────────
 app.post("/api/system/prune", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    const result = await systemPrune();
+    const result = await systemPrune(req.body.includeVolumes === true);
     auditLog(req.user.id, "system.prune", null, `Reclaimed: ${result.totalReclaimed} bytes`);
     res.json(result);
   } catch (err) {
@@ -863,6 +887,12 @@ async function broadcastLoop() {
         webhooks.fireWebhooks("container.state_change", alert).catch(() => {});
       }
       previousContainerStates[c.id] = c.state;
+    }
+
+    // Clean up stale entries for containers that no longer exist
+    const currentIds = new Set(allContainers.map((c) => c.id));
+    for (const id of Object.keys(previousContainerStates)) {
+      if (!currentIds.has(id)) delete previousContainerStates[id];
     }
   } catch (err) {
     console.error("[SSE] Broadcast error:", err.message);

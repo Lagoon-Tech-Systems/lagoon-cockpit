@@ -32,6 +32,16 @@ function clearFailedAttempts(ip) {
   failedAttempts.delete(ip);
 }
 
+// Periodically clean up expired lockouts to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of failedAttempts) {
+    if (entry.lockedUntil && now >= entry.lockedUntil) {
+      failedAttempts.delete(ip);
+    }
+  }
+}, 60 * 60 * 1000); // Every hour
+
 /** Rate limit middleware for auth routes */
 function rateLimitAuth(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
