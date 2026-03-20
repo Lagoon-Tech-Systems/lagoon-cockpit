@@ -11,6 +11,7 @@ interface MenuItem {
 }
 
 const MENU_ITEMS: MenuItem[] = [
+  { label: 'System Map', description: 'Visual node-graph of all infrastructure', icon: '\u{1F5FA}', route: '/manage/system-map' },
   { label: 'Disk Usage', description: 'Storage breakdown + system prune', icon: '\u{1F4BE}', route: '/manage/disk' },
   { label: 'Images', description: 'Manage Docker images', icon: '\u{1F4E6}', route: '/manage/images' },
   { label: 'Networks', description: 'Docker network topology', icon: '\u{1F310}', route: '/manage/networks' },
@@ -18,6 +19,7 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'Alert Rules', description: 'Custom threshold-based alerts', icon: '\u{1F514}', route: '/manage/alert-rules', adminOnly: true },
   { label: 'Webhooks', description: 'Fire events to Slack/Discord/n8n', icon: '\u{1F517}', route: '/manage/webhooks', adminOnly: true },
   { label: 'Activity Log', description: 'Who did what and when', icon: '\u{1F4CB}', route: '/manage/activity' },
+  { label: 'Scheduled Actions', description: 'Cron-based container automation', icon: '\u{23F0}', route: '/manage/schedules', adminOnly: true },
   { label: 'Maintenance Mode', description: 'Pause alerts during planned work', icon: '\u{1F6E0}', route: '/manage/maintenance', adminOnly: true },
   { label: 'Server Settings', description: 'Manage server profiles', icon: '\u{2699}', route: '/settings' },
 ];
@@ -36,7 +38,7 @@ export default function ManageScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Docker Resources</Text>
-        {visibleItems.slice(0, 3).map((item) => (
+        {visibleItems.slice(0, 4).map((item) => (
           <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
             <Text style={styles.menuIcon}>{item.icon}</Text>
             <View style={styles.menuContent}>
@@ -50,7 +52,7 @@ export default function ManageScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Monitoring</Text>
-        {visibleItems.slice(3, 6).map((item) => (
+        {visibleItems.slice(4, 7).map((item) => (
           <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
             <Text style={styles.menuIcon}>{item.icon}</Text>
             <View style={styles.menuContent}>
@@ -65,7 +67,7 @@ export default function ManageScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Operations</Text>
-        {visibleItems.slice(6).map((item) => (
+        {visibleItems.slice(7).map((item) => (
           <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
             <Text style={styles.menuIcon}>{item.icon}</Text>
             <View style={styles.menuContent}>

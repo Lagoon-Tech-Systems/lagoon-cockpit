@@ -29,6 +29,7 @@ const { probeAllEndpoints } = require("./system/endpoints");
 const metricsHistory = require("./system/history");
 const alertEngine = require("./system/alerts");
 const webhooks = require("./system/webhooks");
+const scheduler = require("./system/scheduler");
 
 // ── Stream ────────────────────────────────────────────────
 const { addClient, broadcast, getClientCount } = require("./stream/sse");
@@ -58,6 +59,7 @@ initPush(db);
 metricsHistory.init(db);
 alertEngine.init(db, sendPushNotification);
 webhooks.init(db);
+scheduler.init(db, auditLog);
 
 let maintenanceMode = false;
 
@@ -741,6 +743,47 @@ app.post("/api/webhooks", requireAuth, requireRole("admin"), (req, res) => {
 app.delete("/api/webhooks/:id", requireAuth, requireRole("admin"), (req, res) => {
   webhooks.deleteWebhook(parseInt(req.params.id, 10));
   res.json({ ok: true });
+});
+
+// ── Scheduled Actions ────────────────────────────────────
+app.get("/api/schedules", requireAuth, (_req, res) => {
+  res.json({ schedules: scheduler.listSchedules() });
+});
+
+app.post("/api/schedules", requireAuth, requireRole("admin"), (req, res) => {
+  try {
+    const { name, containerId, containerName, action, cronExpression } = req.body;
+    if (!name || !containerId || !containerName || !action || !cronExpression) {
+      return res.status(400).json({ error: "name, containerId, containerName, action, cronExpression required" });
+    }
+    const schedule = scheduler.createSchedule(name, containerId, containerName, action, cronExpression);
+    auditLog(req.user.id, "schedule.create", name, `${action} ${containerName} @ ${cronExpression}`);
+    res.status(201).json(schedule);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete("/api/schedules/:id", requireAuth, requireRole("admin"), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid schedule ID" });
+  scheduler.deleteSchedule(id);
+  auditLog(req.user.id, "schedule.delete", req.params.id);
+  res.json({ ok: true });
+});
+
+app.put("/api/schedules/:id/toggle", requireAuth, requireRole("admin"), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Invalid schedule ID" });
+  const schedule = scheduler.toggleSchedule(id, req.body.enabled !== false);
+  if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+  auditLog(req.user.id, "schedule.toggle", req.params.id, req.body.enabled !== false ? "enabled" : "disabled");
+  res.json(schedule);
+});
+
+app.get("/api/schedules/history", requireAuth, (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit || "50", 10), 1), 500);
+  res.json({ history: scheduler.getScheduleHistory(limit) });
 });
 
 // ── Maintenance Mode ─────────────────────────────────────
