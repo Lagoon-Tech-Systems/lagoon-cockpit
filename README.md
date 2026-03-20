@@ -1,8 +1,8 @@
 # Lagoon Cockpit
 
-**Mobile-first Docker management dashboard.** Monitor containers, compose stacks, system metrics, SSL certificates, and HTTP endpoints from your phone.
+**Open-source mobile DevOps command center for Docker infrastructure.** Monitor, manage, and automate your containers from your phone or terminal.
 
-Built for DevOps engineers who need eyes on production without SSH.
+Built for DevOps engineers who need to resolve incidents without SSH.
 
 ---
 
@@ -10,37 +10,52 @@ Built for DevOps engineers who need eyes on production without SSH.
 
 Portainer and Rancher are powerful — but they're desktop web UIs. When your server goes down at 2 AM, you're not at your desk. You're reaching for your phone.
 
-Lagoon Cockpit gives you a **native mobile app** backed by a **lightweight API agent** that runs on each server. No heavy dependencies. No Kubernetes required. Just Docker.
+Lagoon Cockpit gives you a **native mobile app** + **CLI tool** backed by a **lightweight API agent** on each server. No heavy dependencies. No Kubernetes required. Just Docker.
 
-- **See everything**: CPU, RAM, disk, load, uptime — at a glance
-- **Manage containers**: Start, stop, restart with confirmation dialogs
-- **Compose stacks**: Group containers by project, manage entire stacks
-- **SSL monitoring**: Know when certificates are expiring
+### What you can do
+
+- **Dashboard**: CPU, RAM, disk gauges with auto-refresh and problem detection
+- **Container management**: Start, stop, restart, bulk operations, inline actions
+- **Compose stacks**: Manage entire stacks as groups
+- **Run commands**: Execute whitelisted diagnostics inside containers from your phone
+- **View logs**: Full log viewer with regex search
+- **System map**: Visual node-graph of your entire infrastructure
+- **Metrics history**: CPU/RAM/disk trends with sparkline charts (7-day retention)
+- **Image management**: List, delete, prune unused Docker images
+- **Network topology**: See which containers share networks with IPs
+- **Disk breakdown**: Storage by category — containers, images, volumes, build cache
+- **System prune**: One-tap cleanup to reclaim disk space
+- **Alert rules**: Custom threshold-based alerts (e.g., CPU > 90% for 5 min)
+- **Webhooks**: Fire events to Slack, Discord, n8n, or any HTTP endpoint
+- **Scheduled actions**: Cron-based container automation (restart weekly, stop at night)
+- **Maintenance mode**: Pause alerts during planned work
+- **Activity feed**: Audit log of who did what and when
+- **SSL monitoring**: Certificate expiry countdown
 - **Endpoint probing**: HTTP health checks with response times
-- **Real-time updates**: Server-Sent Events stream every 15 seconds
-- **Push notifications**: Get alerted when containers go down
-- **Multi-server**: Connect to multiple servers from one app
-- **Secure**: Biometric lock, JWT auth, role-based access control
+- **Push notifications**: Native mobile alerts when things break
+- **Multi-server**: Connect to multiple VPS instances from one app
+- **Biometric lock**: Face ID / fingerprint with auto-lock
+- **CLI companion**: 20 terminal commands for the same API
 
 ---
 
 ## Architecture
 
 ```
-┌────────────────────────────┐
-│  Mobile App (Expo/RN)      │
-│  Biometric lock            │
-│  Multi-server profiles     │
-│  Real-time SSE dashboard   │
-└──────────┬─────────────────┘
-           │ HTTPS
-    ┌──────┴──────┐  ┌──────────────┐
-    │ cockpit-api │  │ cockpit-api  │
-    │ Server A    │  │ Server B     │
-    └─────────────┘  └──────────────┘
+┌────────────────────────────┐     ┌──────────────────┐
+│  Mobile App (Expo/RN)      │     │  CLI (Node.js)   │
+│  Biometric lock            │     │  cockpit overview │
+│  Multi-server profiles     │     │  cockpit ps       │
+│  Real-time SSE dashboard   │     │  cockpit exec ... │
+└──────────┬─────────────────┘     └────────┬─────────┘
+           │ HTTPS (Tailscale/VPN)           │
+    ┌──────┴──────┐  ┌──────────────┐  ┌────┴─────────┐
+    │ cockpit-api │  │ cockpit-api  │  │ cockpit-api  │
+    │ Server A    │  │ Server B     │  │ Server C     │
+    └─────────────┘  └──────────────┘  └──────────────┘
 ```
 
-Each server runs its own `cockpit-api` container (~22 MB RAM). The mobile app stores server profiles and switches between them.
+Each server runs its own `cockpit-api` container (~22 MB RAM). Both the mobile app and CLI connect to the same API.
 
 ---
 
@@ -51,18 +66,14 @@ Each server runs its own `cockpit-api` container (~22 MB RAM). The mobile app st
 ```bash
 git clone https://github.com/Bigabou007-dev/lagoon-cockpit.git
 cd lagoon-cockpit/packages/api
-
-# Configure
 cp .env.example .env
 # Edit .env: set API_KEY, JWT_SECRET, SERVER_NAME
-
-# Deploy
 docker compose up -d
 ```
 
-The API runs on port 3000 inside the container. No ports are exposed by default — connect it to your reverse proxy network or expose a port as needed.
+### 2. Connect from mobile
 
-### 2. Run the mobile app
+Build the app with EAS or run in development:
 
 ```bash
 cd lagoon-cockpit/packages/app
@@ -70,140 +81,154 @@ npm install
 npx expo start
 ```
 
-Scan the QR code with Expo Go on your phone. Add your server URL and API key.
+### 3. Or use the CLI
+
+```bash
+cd lagoon-cockpit/packages/cli
+node src/index.js connect http://your-server:3000 your-api-key "My Server"
+node src/index.js overview
+```
 
 ---
 
-## API Endpoints
+## CLI Commands
+
+```
+cockpit connect <url> <key> [name]   Connect to a server
+cockpit overview                     System dashboard with gauges
+cockpit ps [running|stopped]         List containers with status
+cockpit stacks                       List compose stacks
+cockpit start/stop/restart <id>      Container actions
+cockpit logs <id> [--tail N]         View container logs
+cockpit logs <id> --search <query>   Search logs with regex
+cockpit exec <id> <command>          Run command in container
+cockpit images                       List Docker images
+cockpit networks                     Show network topology
+cockpit disk                         Disk usage breakdown
+cockpit prune                        System prune
+cockpit ssl                          SSL certificate status
+cockpit endpoints                    HTTP endpoint probes
+cockpit maintenance [on|off]         Toggle maintenance mode
+cockpit audit                        View activity log
+cockpit servers                      List configured servers
+cockpit use <name>                   Switch active server
+```
+
+---
+
+## API Endpoints (23)
 
 ### Auth
-
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/auth/token` | Exchange API key for JWT (single-admin mode) |
-| POST | `/auth/login` | Login with email/password (multi-user mode) |
+| POST | `/auth/token` | API key → JWT (single-admin) |
+| POST | `/auth/login` | Email/password → JWT (multi-user) |
 | POST | `/auth/refresh` | Refresh access token |
 
 ### Containers
-
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
 | GET | `/api/containers` | viewer+ | List all containers |
-| GET | `/api/containers/:id` | viewer+ | Container detail + live stats |
+| GET | `/api/containers/:id` | viewer+ | Detail + live stats |
 | GET | `/api/containers/:id/logs` | viewer+ | Container logs |
-| POST | `/api/containers/:id/start` | operator+ | Start container |
-| POST | `/api/containers/:id/stop` | operator+ | Stop container |
-| POST | `/api/containers/:id/restart` | operator+ | Restart container |
+| GET | `/api/containers/:id/logs/search` | viewer+ | Regex log search |
+| GET | `/api/containers/:id/top` | viewer+ | Running processes |
+| POST | `/api/containers/:id/start` | operator+ | Start |
+| POST | `/api/containers/:id/stop` | operator+ | Stop |
+| POST | `/api/containers/:id/restart` | operator+ | Restart |
+| POST | `/api/containers/:id/exec` | admin | Run whitelisted command |
+| POST | `/api/containers/:id/rebuild` | admin | Nuke & rebuild |
+| POST | `/api/containers/bulk` | operator+ | Bulk start/stop/restart |
 
-### Compose Stacks
-
+### Docker Resources
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
-| GET | `/api/stacks` | viewer+ | List compose projects |
-| GET | `/api/stacks/:name` | viewer+ | Stack detail |
-| POST | `/api/stacks/:name/start` | admin | Start all containers |
-| POST | `/api/stacks/:name/stop` | admin | Stop all containers |
-| POST | `/api/stacks/:name/restart` | admin | Restart all containers |
+| GET | `/api/stacks` | viewer+ | List compose stacks |
+| GET | `/api/networks` | viewer+ | Docker networks with IPs |
+| GET | `/api/volumes` | viewer+ | Docker volumes |
+| GET | `/api/images` | viewer+ | Docker images with sizes |
+| POST | `/api/system/prune` | admin | System-wide cleanup |
 
-### System
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/overview` | CPU, RAM, disk, container/stack summary |
-| GET | `/api/system/metrics` | Detailed system metrics |
-| GET | `/api/endpoints` | HTTP endpoint probe results |
-| GET | `/api/ssl` | SSL certificate expiry |
-| GET | `/api/stream` | SSE real-time stream |
-
----
-
-## Auth Modes
-
-### Single-admin (default)
-
-Set `AUTH_MODE=key` in `.env`. One API key, one admin user. Simple.
-
-```bash
-curl -X POST http://localhost:3000/auth/token \
-  -H 'Content-Type: application/json' \
-  -d '{"apiKey": "your-key"}'
-```
-
-### Multi-user
-
-Set `AUTH_MODE=users` in `.env`. SQLite-backed user accounts with roles:
-
-| Role | Permissions |
-|------|-------------|
-| **admin** | Full control — manage containers, stacks, users |
-| **operator** | Start/stop/restart containers, view everything |
-| **viewer** | Read-only access to all dashboards |
-
-The first admin is auto-created from `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`.
+### Monitoring & Automation
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/overview` | viewer+ | Full system dashboard |
+| GET | `/api/metrics/history` | viewer+ | Historical metrics (sparklines) |
+| GET | `/api/ssl` | viewer+ | SSL certificate expiry |
+| GET | `/api/endpoints` | viewer+ | HTTP endpoint probes |
+| GET/POST | `/api/alerts/rules` | admin | Custom threshold alerts |
+| GET/POST | `/api/webhooks` | admin | Webhook integrations |
+| GET/POST | `/api/schedules` | admin | Cron-based actions |
+| GET/POST | `/api/maintenance` | admin | Maintenance mode |
+| GET | `/api/audit` | admin | Activity log |
+| GET | `/api/stream` | viewer+ | SSE real-time stream |
 
 ---
 
 ## Mobile App Screens
 
-**Overview** — System gauges (CPU/RAM/disk), container and stack summary, recent alerts
+**5 tabs**: Overview, Containers, Stacks, Alerts, Manage
 
-**Containers** — Searchable list with status filters, tap for detail view with live stats, logs, and action buttons
+**Overview** — Interactive gauges, quick stats, problem containers, stack health, auto-refresh every 30s
 
-**Stacks** — Compose projects grouped by Docker labels, stack-level start/stop/restart
+**Containers** — Search + filter chips, bulk select mode, inline start/stop/restart actions. Detail view with 5 tabs: Stats, Logs (regex search), Exec (run commands), Env (with secret masking), Top (processes)
 
-**Status** — HTTP endpoint health checks with response times, SSL certificate expiry countdown
+**Stacks** — Compose projects grouped by Docker labels, stack-level actions
 
-**Alerts** — Real-time event log from SSE stream, container state changes
+**Alerts** — Real-time event feed from SSE stream
 
----
-
-## Configuration
-
-See [`.env.example`](packages/api/.env.example) for all options:
-
-```env
-AUTH_MODE=key                    # "key" or "users"
-API_KEY=your-secret              # For single-admin mode
-JWT_SECRET=random-64-chars       # For signing tokens
-SERVER_NAME=My Server            # Display name in the app
-ENDPOINTS=API|https://...|200    # HTTP probes (optional)
-SSL_DOMAINS=example.com          # SSL monitoring (optional)
-```
-
----
-
-## Tech Stack
-
-**API**: Node.js 20, Express, Docker Engine API (unix socket), SQLite, zero-dep metrics from `/proc`
-
-**Mobile**: Expo 55, React Native 0.83, expo-router, Zustand, expo-secure-store, expo-local-authentication
-
-**Deployment**: Docker (Alpine, ~45 MB image, ~22 MB runtime)
+**Manage** — Hub linking to 10 management screens:
+- System Map (visual node-graph)
+- Disk Usage (breakdown by category + prune)
+- Images (list, delete, prune)
+- Networks (topology with container IPs)
+- Metrics History (sparkline charts, 1h/6h/24h/7d)
+- Alert Rules (custom thresholds)
+- Webhooks (Slack/Discord/n8n integration)
+- Scheduled Actions (cron-based automation)
+- Activity Log (audit trail)
+- Maintenance Mode (pause alerts)
 
 ---
 
 ## Security
 
-- No public ports by default — connect via VPN or reverse proxy
-- API key comparison uses constant-time hashing (SHA-256 + `timingSafeEqual`)
-- JWT access tokens expire in 15 minutes, refresh tokens in 7 days
-- Rate limiting: 5 failed auth attempts trigger 15-minute lockout
-- Biometric lock on the mobile app with auto-lock after 2 minutes in background
-- All container actions require operator+ role and are audit-logged
-- Docker socket is the only privileged resource — no shell execution
+- **No public ports** by default — connect via Tailscale, VPN, or reverse proxy
+- **Exec whitelist**: Only pre-approved diagnostic commands, no shell interpretation, metacharacter blocking
+- **SSRF protection**: Webhooks block private IPs, localhost, cloud metadata endpoints
+- **Input validation**: All Docker IDs, names, and URLs validated with strict regexes
+- **Constant-time auth**: API key comparison via SHA-256 + `timingSafeEqual`
+- **JWT**: 15-minute access tokens, 7-day refresh tokens with rotation
+- **Rate limiting**: 5 failed auth attempts → 15-minute lockout
+- **Biometric lock**: Face ID / fingerprint with auto-lock after 2 minutes
+- **Audit logging**: All actions logged to SQLite with user, target, and timestamp
+- **Entry limits**: Max 50 webhooks, 100 alert rules, 50 scheduled actions
+- **CLI security**: Config file stored with 0600 permissions, raw API keys not persisted
+
+---
+
+## Tech Stack
+
+| Component | Stack |
+|-----------|-------|
+| **API** | Node.js 20, Express, Docker Engine API (unix socket), SQLite (better-sqlite3) |
+| **Mobile** | Expo 55, React Native 0.83, expo-router, Zustand, expo-secure-store |
+| **CLI** | Node.js, zero dependencies |
+| **Deployment** | Docker (Alpine, ~45 MB image, ~22 MB runtime) |
 
 ---
 
 ## Contributing
 
-Pull requests welcome. Please:
+PRs welcome. Please:
 
-1. Follow the existing code style
-2. Test your changes against a real Docker environment
+1. Follow existing code patterns
+2. Test against a real Docker environment
 3. Don't add heavy dependencies — the API is intentionally lightweight
+4. Run the security checklist: input validation, role gating, audit logging
 
 ---
 
 ## License
 
-[MIT](LICENSE) — Copyright 2026 Lagoon Tech Systems
+[MIT](LICENSE) — Copyright 2026 [Lagoon Tech Systems](https://lagoontechsystems.com)
