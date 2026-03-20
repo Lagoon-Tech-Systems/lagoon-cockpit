@@ -316,7 +316,7 @@ app.get("/api/overview", requireAuth, async (_req, res) => {
 // ── Container Routes ──────────────────────────────────────
 app.get("/api/containers", requireAuth, async (_req, res) => {
   try {
-    const list = await containers.listContainers(true);
+    const list = await containers.listContainers(true, true);
     res.json({ containers: list });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });

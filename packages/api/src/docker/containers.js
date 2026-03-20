@@ -1,9 +1,9 @@
 const { dockerAPI } = require("./client");
 
 /** List all containers with summary info */
-async function listContainers(all = true) {
+async function listContainers(all = true, includeSize = false) {
   const raw = await dockerAPI("GET", "/containers/json", null, {
-    query: { all: all ? "true" : "false", size: "true" },
+    query: { all: all ? "true" : "false", size: includeSize ? "true" : "false" },
   });
 
   return raw.map((c) => ({
