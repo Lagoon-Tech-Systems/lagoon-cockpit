@@ -1,0 +1,7 @@
+flask==3.1.1
+waitress==3.0.2
+psutil==6.1.1
+pywin32==308
+PyJWT==2.10.1
+python-dotenv==1.1.0
+requests==2.32.3
