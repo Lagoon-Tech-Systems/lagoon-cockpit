@@ -7,5 +7,8 @@
   "workspaces": [
     "packages/api",
     "packages/app"
-  ]
+  ],
+  "overrides": {
+    "brace-expansion": ">=5.0.5"
+  }
 }
