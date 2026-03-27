@@ -4,6 +4,7 @@ Standalone REST API for managing Windows Server infrastructure.
 Compatible with the Lagoon Cockpit mobile app (multi-server profiles).
 """
 
+import os
 import time
 import threading
 from flask import Flask, request, jsonify, Response, g
@@ -40,11 +41,18 @@ def log_request():
         print(f"[REQ] {request.method} {request.path} from {request.remote_addr}")
 
 
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+
 @app.after_request
 def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    origin = request.headers.get("Origin", "")
+    if ALLOWED_ORIGINS and origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    elif not ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     return response

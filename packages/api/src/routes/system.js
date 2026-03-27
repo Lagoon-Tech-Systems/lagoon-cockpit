@@ -163,8 +163,17 @@ router.get("/api/health", requireAuth, (_req, res) => {
 });
 
 // ── Prometheus Metrics Export ─────────────────────────────
-// Unauthenticated — intended for Prometheus scraping over internal Docker network only.
-router.get("/metrics", async (_req, res) => {
+// Protected by a static bearer token (METRICS_TOKEN env var).
+// If no token is configured, the endpoint is open (local-only setups).
+const METRICS_TOKEN = process.env.METRICS_TOKEN || null;
+
+router.get("/metrics", async (req, res) => {
+  if (METRICS_TOKEN) {
+    const auth = req.headers.authorization || "";
+    if (auth !== `Bearer ${METRICS_TOKEN}`) {
+      return res.status(401).set("Content-Type", "text/plain").send("Unauthorized\n");
+    }
+  }
   const sys = getSystemMetrics();
   const containerList = await containers.listContainers(true).catch(() => []);
   const running = containerList.filter((c) => c.state === "running").length;
@@ -233,14 +242,16 @@ router.get("/metrics", async (_req, res) => {
   ];
 
   // Per-container state metrics
-  for (const c of containerList) {
-    const state = c.state === "running" ? 1 : 0;
-    const safeName = c.name.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const safeImage = c.image.replace(/[^a-zA-Z0-9_./:@-]/g, "_");
+  if (containerList.length > 0) {
     lines.push("");
-    lines.push(`# HELP cockpit_container_running Whether container is running (1) or not (0)`);
-    lines.push(`# TYPE cockpit_container_running gauge`);
-    lines.push(`cockpit_container_running{name="${safeName}",image="${safeImage}"} ${state}`);
+    lines.push("# HELP cockpit_container_running Whether container is running (1) or not (0)");
+    lines.push("# TYPE cockpit_container_running gauge");
+    for (const c of containerList) {
+      const state = c.state === "running" ? 1 : 0;
+      const safeName = c.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const safeImage = c.image.replace(/[^a-zA-Z0-9_./:@-]/g, "_");
+      lines.push(`cockpit_container_running{name="${safeName}",image="${safeImage}"} ${state}`);
+    }
   }
 
   res.set("Content-Type", "text/plain; version=0.0.4; charset=utf-8");

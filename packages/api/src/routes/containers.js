@@ -56,6 +56,8 @@ router.get("/api/containers/:id/logs/search", requireAuth, validateContainerId, 
     const contextLines = Math.min(parseInt(context, 10) || 2, 5);
     let pattern = null;
     if (regex === "true") {
+      if (q.length > 200) return res.status(400).json({ error: "Regex pattern too long (max 200 chars)" });
+      if (/(\(.+\+\)[\+\*]|\\1)/.test(q)) return res.status(400).json({ error: "Potentially unsafe regex pattern" });
       try {
         pattern = new RegExp(q, "i");
       } catch (regexErr) {
