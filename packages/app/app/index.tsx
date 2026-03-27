@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
 import { COLORS } from '../src/theme/tokens';
 
@@ -137,7 +138,7 @@ export default function ServerSelectScreen() {
     >
       <View style={styles.cardLeft}>
         <View style={styles.cardHeader}>
-          <Text style={styles.statusDot}>{'\u{1F7E2}'}</Text>
+          <Ionicons name="ellipse" size={8} color={COLORS.green} style={{ marginRight: 8 }} />
           <Text style={styles.profileName}>{item.name}</Text>
         </View>
         <Text style={styles.profileUrl}>{item.url}</Text>
@@ -151,7 +152,7 @@ export default function ServerSelectScreen() {
         {connectingId === item.id ? (
           <ActivityIndicator size="small" color="#4A90FF" />
         ) : (
-          <Text style={styles.chevron}>{'\u{203A}'}</Text>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
         )}
       </View>
     </TouchableOpacity>
@@ -165,10 +166,10 @@ export default function ServerSelectScreen() {
       {/* Error card */}
       {error ? (
         <View style={styles.errorCard}>
-          <Text style={styles.errorIcon}>{'\u{26A0}'}</Text>
+          <Ionicons name="alert-circle" size={18} color={COLORS.red} style={{ marginRight: 10, marginTop: 1 }} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => setError(null)} style={styles.errorDismiss}>
-            <Text style={styles.errorDismissText}>{'\u{2715}'}</Text>
+            <Ionicons name="close" size={16} color={COLORS.red} />
           </TouchableOpacity>
         </View>
       ) : null}

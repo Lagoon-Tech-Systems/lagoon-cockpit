@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useDashboardStore, type StackSummary } from '../../src/stores/dashboardStore';
 import { apiFetch } from '../../src/lib/api';
 import StackCard from '../../src/components/StackCard';
+import { COLORS } from '../../src/theme/tokens';
 
 export default function StacksScreen() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function StacksScreen() {
         )}
         keyExtractor={(item) => item.name}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4A90FF" colors={['#4A90FF']} progressBackgroundColor="#2C2C2E" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.blue} colors={[COLORS.blue]} progressBackgroundColor={COLORS.card} />
         }
         contentContainerStyle={styles.list}
         ListEmptyComponent={<Text style={styles.empty}>No compose stacks found</Text>}
@@ -48,7 +49,7 @@ export default function StacksScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1C1C1E' },
+  container: { flex: 1, backgroundColor: COLORS.bg },
   list: { padding: 16, paddingBottom: 20 },
-  empty: { color: '#636366', fontSize: 14, textAlign: 'center', marginTop: 40 },
+  empty: { color: COLORS.textTertiary, fontSize: 14, textAlign: 'center', marginTop: 40 },
 });

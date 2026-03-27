@@ -189,12 +189,12 @@ export default function ContainerDetailScreen() {
   const statusColor = state === 'running' ? COLORS.green : COLORS.red;
   const statusLabel = state === 'running' ? 'Running' : state === 'exited' ? 'Stopped' : state.charAt(0).toUpperCase() + state.slice(1);
 
-  const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: 'stats', label: 'Stats', icon: '\u{1F4CA}' },
-    { key: 'logs', label: 'Logs', icon: '\u{1F4C4}' },
-    { key: 'exec', label: 'Exec', icon: '\u{1F4BB}' },
-    { key: 'env', label: 'Env', icon: '\u{1F511}' },
-    { key: 'processes', label: 'Top', icon: '\u{2699}' },
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'stats', label: 'Stats' },
+    { key: 'logs', label: 'Logs' },
+    { key: 'exec', label: 'Exec' },
+    { key: 'env', label: 'Env' },
+    { key: 'processes', label: 'Top' },
   ];
 
   return (
@@ -221,7 +221,7 @@ export default function ContainerDetailScreen() {
         {/* Error State */}
         {fetchError && (
           <View style={styles.errorCard}>
-            <Text style={styles.errorIcon}>{'\u26A0'}</Text>
+            <Ionicons name="alert-circle" size={18} color={COLORS.red} style={{ marginRight: 8 }} />
             <Text style={styles.errorText}>{fetchError}</Text>
             <TouchableOpacity style={styles.retryBtn} onPress={fetchDetail} accessibilityRole="button" accessibilityLabel="Retry loading">
               <Text style={styles.retryBtnText}>Retry</Text>
@@ -239,7 +239,7 @@ export default function ContainerDetailScreen() {
           <Text style={styles.heroImage}>{imageStr}</Text>
           {restartCount > 0 && (
             <View style={styles.restartBadge}>
-              <Text style={styles.restartText}>{'\u26A0'} {restartCount} restart{restartCount > 1 ? 's' : ''}</Text>
+              <Text style={styles.restartText}><Ionicons name="alert-circle" size={12} color={COLORS.yellow} /> {restartCount} restart{restartCount > 1 ? 's' : ''}</Text>
             </View>
           )}
         </View>
@@ -350,7 +350,7 @@ export default function ContainerDetailScreen() {
           <View>
             <View style={styles.logSearchRow}>
               <View style={styles.logSearchContainer}>
-                <Text style={styles.logSearchIcon}>{'\u{1F50D}'}</Text>
+                <Ionicons name="search" size={14} color={COLORS.textTertiary} style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.logSearchInput}
                   placeholder="Search logs (regex)..."
@@ -450,7 +450,7 @@ export default function ContainerDetailScreen() {
               </>
             ) : (
               <View style={styles.noAccessCard}>
-                <Text style={styles.noAccessIcon}>{'\u{1F512}'}</Text>
+                <Ionicons name="lock-closed" size={32} color={COLORS.textTertiary} style={{ marginBottom: 8 }} />
                 <Text style={styles.noAccessText}>Admin role required for exec</Text>
               </View>
             )}

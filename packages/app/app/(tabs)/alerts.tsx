@@ -1,34 +1,39 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useDashboardStore, type Alert } from '../../src/stores/dashboardStore';
+import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
 
-function getAlertIcon(alert: Alert): string {
-  if (alert.currentState === 'running') return '\u{1F7E2}';
-  if (alert.currentState === 'exited' || alert.currentState === 'dead') return '\u{1F534}';
-  if (alert.type === 'container_state_change') return '\u{1F4E6}';
-  return '\u{26A0}';
+function getAlertIconProps(alert: Alert): { name: keyof typeof Ionicons.glyphMap; color: string } {
+  if (alert.currentState === 'running') return { name: 'checkmark-circle', color: COLORS.green };
+  if (alert.currentState === 'exited' || alert.currentState === 'dead') return { name: 'close-circle', color: COLORS.red };
+  if (alert.type === 'container_state_change') return { name: 'cube-outline', color: COLORS.orange };
+  return { name: 'alert-circle', color: COLORS.yellow };
 }
 
 export default function AlertsScreen() {
   const { alerts, clearAlerts } = useDashboardStore();
 
-  const renderAlert = ({ item }: { item: Alert }) => (
-    <View style={styles.alertItem}>
-      <Text style={styles.icon}>{getAlertIcon(item)}</Text>
-      <View style={styles.alertContent}>
-        <Text style={styles.alertTitle}>
-          {item.containerName || item.type}
-        </Text>
-        <Text style={styles.alertDetail}>
-          {item.previousState
-            ? `${item.previousState} → ${item.currentState}`
-            : item.message || item.currentState}
-        </Text>
-        <Text style={styles.alertTime}>
-          {new Date(item.timestamp).toLocaleString()}
-        </Text>
+  const renderAlert = ({ item }: { item: Alert }) => {
+    const iconProps = getAlertIconProps(item);
+    return (
+      <View style={styles.alertItem}>
+        <Ionicons name={iconProps.name} size={18} color={iconProps.color} style={{ marginTop: 2 }} />
+        <View style={styles.alertContent}>
+          <Text style={styles.alertTitle}>
+            {item.containerName || item.type}
+          </Text>
+          <Text style={styles.alertDetail}>
+            {item.previousState
+              ? `${item.previousState} \u2192 ${item.currentState}`
+              : item.message || item.currentState}
+          </Text>
+          <Text style={styles.alertTime}>
+            {new Date(item.timestamp).toLocaleString()}
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -45,7 +50,7 @@ export default function AlertsScreen() {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>{'\u{2705}'}</Text>
+            <Ionicons name="checkmark-circle" size={48} color={COLORS.green} style={{ marginBottom: SPACING.lg }} />
             <Text style={styles.emptyText}>No alerts</Text>
             <Text style={styles.emptySubtext}>Everything is running smoothly</Text>
           </View>
@@ -56,35 +61,33 @@ export default function AlertsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1C1C1E' },
+  container: { flex: 1, backgroundColor: COLORS.bg },
   clearBtn: {
     alignSelf: 'flex-end',
-    marginRight: 16,
-    marginTop: 12,
-    paddingHorizontal: 12,
+    marginRight: SPACING.lg,
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: '#3A3A3C',
+    backgroundColor: COLORS.border,
   },
-  clearText: { color: '#8E8E93', fontSize: 13 },
-  list: { padding: 16, paddingBottom: 20 },
+  clearText: { color: COLORS.textSecondary, fontSize: 13 },
+  list: { padding: SPACING.lg, paddingBottom: SPACING.xl },
   alertItem: {
     flexDirection: 'row',
-    gap: 12,
-    backgroundColor: '#2C2C2E',
-    borderRadius: 16,
+    gap: SPACING.md,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
     padding: 14,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
     borderWidth: 1,
-    borderColor: '#3A3A3C',
+    borderColor: COLORS.border,
   },
-  icon: { fontSize: 18, marginTop: 2 },
   alertContent: { flex: 1 },
-  alertTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  alertDetail: { color: '#8E8E93', fontSize: 13, marginBottom: 4 },
-  alertTime: { color: '#636366', fontSize: 11 },
+  alertTitle: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  alertDetail: { color: COLORS.textSecondary, fontSize: 13, marginBottom: 4 },
+  alertTime: { color: COLORS.textTertiary, fontSize: 11 },
   emptyContainer: { alignItems: 'center', marginTop: 80 },
-  emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyText: { color: '#FFFFFF', fontSize: 18, fontWeight: '600', marginBottom: 4 },
-  emptySubtext: { color: '#636366', fontSize: 14 },
+  emptyText: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '600', marginBottom: 4 },
+  emptySubtext: { color: COLORS.textTertiary, fontSize: 14 },
 });

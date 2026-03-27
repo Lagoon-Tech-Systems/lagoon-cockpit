@@ -4,6 +4,7 @@ import { View, AppState, type AppStateStatus } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '../src/stores/authStore';
 import LockScreen from '../src/components/LockScreen';
+import { COLORS } from '../src/theme/tokens';
 
 const BACKGROUND_LOCK_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -32,7 +33,7 @@ export default function RootLayout() {
   if (!isUnlocked) return <LockScreen />;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#0D0D0D' }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <StatusBar style="light" />
       <Slot />
     </View>

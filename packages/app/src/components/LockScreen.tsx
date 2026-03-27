@@ -83,7 +83,7 @@ export default function LockScreen() {
             style={styles.button}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Authenticating...' : '\u{1F513}  Unlock'}
+              {isLoading ? 'Authenticating...' : 'Unlock'}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
