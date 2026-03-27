@@ -1,21 +1,49 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useSSE } from '../../src/hooks/useSSE';
 
+const TAB_ICONS: Record<string, string> = {
+  Overview: '\u{1F4CA}',
+  Containers: '\u{1F4E6}',
+  Stacks: '\u{1F5C2}',
+  Alerts: '\u{1F514}',
+  Manage: '\u{2699}',
+};
+
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    Overview: '\u{1F4CA}',
-    Containers: '\u{1F4E6}',
-    Stacks: '\u{1F5C2}',
-    Alerts: '\u{1F514}',
-    Manage: '\u{2699}',
-  };
   return (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
-      {icons[label] || '\u{2699}'}
-    </Text>
+    <View style={tabIconStyles.wrapper}>
+      <Text
+        style={[
+          tabIconStyles.icon,
+          { opacity: focused ? 1 : 0.6 },
+        ]}
+      >
+        {TAB_ICONS[label] || '\u{2699}'}
+      </Text>
+      {focused && <View style={tabIconStyles.activeDot} />}
+    </View>
   );
 }
+
+const tabIconStyles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+    minHeight: 44,
+  },
+  icon: {
+    fontSize: 24,
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#4A90FF',
+    marginTop: 4,
+  },
+});
 
 export default function TabLayout() {
   useSSE();
@@ -24,17 +52,28 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarStyle: {
-          backgroundColor: '#111827',
-          borderTopColor: '#1F2937',
-          height: 80,
-          paddingBottom: 20,
+          backgroundColor: '#1C1C1E',
+          borderTopColor: '#3A3A3C',
+          borderTopWidth: 1,
+          height: 85,
+          paddingBottom: 25,
+          paddingTop: 8,
         },
-        tabBarActiveTintColor: '#60A5FA',
-        tabBarInactiveTintColor: '#6B7280',
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-        headerStyle: { backgroundColor: '#0D0D0D' },
-        headerTintColor: '#F9FAFB',
+        tabBarActiveTintColor: '#4A90FF',
+        tabBarInactiveTintColor: '#636366',
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: -2,
+        },
+        headerStyle: {
+          backgroundColor: '#1C1C1E',
+        },
+        headerTintColor: '#FFFFFF',
         headerShadowVisible: false,
+        headerTitleStyle: {
+          fontWeight: '700',
+        },
       }}
     >
       <Tabs.Screen

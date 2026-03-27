@@ -1,34 +1,25 @@
-# LinkedIn Post — Lagoon Cockpit v3 Launch
+# LinkedIn Post — Lagoon Cockpit v3 Update
 
 ---
 
-Just shipped **Lagoon Cockpit v3** -- an open-source mobile DevOps command center for your entire infrastructure.
+One week ago I open-sourced Lagoon Cockpit -- a mobile DevOps dashboard.
 
-The problem: you're on the go, something goes down, and your only options are SSH from a phone keyboard or a Telegram alert you can't act on.
+Since then it went from "monitor Docker containers" to a full cross-platform infrastructure command center. Here's what shipped in v3:
 
-Lagoon Cockpit gives you a native mobile app that connects to lightweight agents running on each server -- Linux or Windows. From your phone you can:
+**Windows Server support.** Same app, second server profile. Monitor Windows Services, processes, system resources, and even MT5 trading bridges -- all from your phone next to your Docker containers.
 
-- Monitor CPU, RAM, disk across multiple servers at a glance
-- Manage Docker containers and Compose stacks (start/stop/restart/rebuild)
-- Execute commands inside containers with a whitelisted exec shell
-- Search container logs with regex in real-time
-- Manage Windows Services, processes, and MT5 trading bridges
-- Set up scheduled actions (cron-based container automation)
-- Configure alert rules with custom thresholds
-- Fire webhooks to Slack/Discord/n8n on container events
-- View a visual system map of your entire Docker topology
-- Switch between servers instantly -- Linux VPS, Windows Server, whatever you run
+**23 API endpoints on Linux. 15 on Windows.** Container exec with a security-hardened command whitelist. Regex log search. Bulk operations. Nuke & rebuild. Scheduled cron actions. Custom alert rules. Webhook integrations.
 
-Built with a security-first mindset: 2 full audits (35 findings fixed), role-based access (admin/operator/viewer), JWT auth with rate limiting, and zero public ports on the API.
+**A visual system map** that shows your entire Docker topology -- stacks grouped, networks connected, health color-coded. Tap any node to manage it.
 
-**Tech:**
-- Backend: Express + Docker Engine API (Linux) / Flask + psutil (Windows)
-- Mobile: Expo 55 + React Native
-- CLI: Zero-dependency terminal companion with 20 commands
-- 10,000+ lines of code across 4 packages
+**A CLI companion** with 20 commands. `cockpit ps`, `cockpit logs`, `cockpit exec` -- everything the mobile app does, from your terminal.
 
-Running in production managing 16 Docker containers + a Windows Server with 210 services.
+**35 security findings fixed** across 2 full audits before going public. Shell injection prevention, SSRF protection, rate limiting, role-based access control.
 
-MIT licensed: https://github.com/Bigabou007-dev/lagoon-cockpit
+10,000+ lines across 4 packages. MIT licensed. Running in production right now.
 
-#OpenSource #DevOps #Docker #ReactNative #MobileFirst #InfrastructureMonitoring #SelfHosted #WindowsServer
+The goal was simple: manage your servers from your phone without SSH. We went a bit further than that.
+
+https://github.com/Bigabou007-dev/lagoon-cockpit
+
+#OpenSource #DevOps #Docker #ReactNative #InfrastructureMonitoring #SelfHosted

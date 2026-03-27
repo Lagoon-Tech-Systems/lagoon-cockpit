@@ -1,4 +1,4 @@
-import { View, TextInput, FlatList, RefreshControl, StyleSheet, Alert } from 'react-native';
+import { View, TextInput, FlatList, RefreshControl, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useDashboardStore, type ContainerSummary } from '../../src/stores/dashboardStore';
@@ -7,6 +7,28 @@ import ContainerCard from '../../src/components/ContainerCard';
 import { Text, TouchableOpacity } from 'react-native';
 
 type Filter = 'all' | 'running' | 'stopped' | 'unhealthy';
+
+const COLORS = {
+  bg: '#1C1C1E',
+  card: '#2C2C2E',
+  border: '#3A3A3C',
+  blue: '#4A90FF',
+  green: '#34D399',
+  red: '#FF6B6B',
+  purple: '#A78BFA',
+  orange: '#FB923C',
+  yellow: '#FBBF24',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#8E8E93',
+  textTertiary: '#636366',
+};
+
+const FILTER_COLORS: Record<Filter, string> = {
+  all: COLORS.blue,
+  running: COLORS.green,
+  stopped: COLORS.red,
+  unhealthy: COLORS.yellow,
+};
 
 export default function ContainersScreen() {
   const router = useRouter();
@@ -89,60 +111,94 @@ export default function ContainersScreen() {
     }
   };
 
+  const runningCount = containers.filter(c => c.state === 'running').length;
+  const stoppedCount = containers.filter(c => c.state !== 'running').length;
+  const unhealthyCount = containers.filter(c => c.health === 'unhealthy').length;
+
   const filters: { key: Filter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: containers.length },
-    { key: 'running', label: 'Running', count: containers.filter(c => c.state === 'running').length },
-    { key: 'stopped', label: 'Stopped', count: containers.filter(c => c.state !== 'running').length },
-    { key: 'unhealthy', label: 'Unhealthy', count: containers.filter(c => c.health === 'unhealthy').length },
+    { key: 'running', label: 'Running', count: runningCount },
+    { key: 'stopped', label: 'Stopped', count: stoppedCount },
+    { key: 'unhealthy', label: 'Unhealthy', count: unhealthyCount },
   ];
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.search}
-        placeholder="Search containers..."
-        placeholderTextColor="#6B7280"
-        value={search}
-        onChangeText={setSearch}
-      />
-
-      <View style={styles.filterRow}>
-        {filters.map((f) => (
-          <TouchableOpacity
-            key={f.key}
-            style={[styles.filterBtn, filter === f.key && styles.filterBtnActive]}
-            onPress={() => setFilter(f.key)}
-          >
-            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>
-              {f.label} ({f.count})
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Summary bar */}
+      <View style={styles.summaryBar}>
+        <Text style={styles.summaryText}>
+          {containers.length} containers
+          <Text style={{ color: COLORS.green }}> {'\u2022'} {runningCount} running</Text>
+          {stoppedCount > 0 && <Text style={{ color: COLORS.red }}> {'\u2022'} {stoppedCount} stopped</Text>}
+          {unhealthyCount > 0 && <Text style={{ color: COLORS.yellow }}> {'\u2022'} {unhealthyCount} unhealthy</Text>}
+        </Text>
       </View>
 
-      {/* Bulk mode toggle + actions */}
-      <View style={styles.bulkBar}>
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchIcon}>{'\u{1F50D}'}</Text>
+        <TextInput
+          style={styles.search}
+          placeholder="Search containers..."
+          placeholderTextColor={COLORS.textTertiary}
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+
+      {/* Filter pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
+        {filters.map((f) => {
+          const isActive = filter === f.key;
+          const pillColor = FILTER_COLORS[f.key];
+          return (
+            <TouchableOpacity
+              key={f.key}
+              style={[
+                styles.filterPill,
+                isActive && { backgroundColor: pillColor + '26', borderColor: pillColor },
+              ]}
+              onPress={() => setFilter(f.key)}
+            >
+              <Text style={[
+                styles.filterText,
+                isActive && { color: pillColor },
+              ]}>
+                {f.label}
+              </Text>
+              <View style={[
+                styles.filterCount,
+                isActive && { backgroundColor: pillColor + '33' },
+              ]}>
+                <Text style={[
+                  styles.filterCountText,
+                  isActive && { color: pillColor },
+                ]}>
+                  {f.count}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Bulk mode toggle inline with filters */}
         <TouchableOpacity
-          style={[styles.bulkToggle, bulkMode && styles.bulkToggleActive]}
+          style={[
+            styles.filterPill,
+            bulkMode && { backgroundColor: COLORS.purple + '26', borderColor: COLORS.purple },
+          ]}
           onPress={() => { setBulkMode(!bulkMode); setSelectedIds(new Set()); }}
         >
-          <Text style={styles.bulkToggleText}>{bulkMode ? `${selectedIds.size} selected` : 'Select'}</Text>
+          <Text style={[
+            styles.filterText,
+            bulkMode && { color: COLORS.purple },
+          ]}>
+            {bulkMode ? `${selectedIds.size} selected` : 'Select'}
+          </Text>
         </TouchableOpacity>
-        {bulkMode && selectedIds.size > 0 && (
-          <View style={styles.bulkActions}>
-            <TouchableOpacity style={[styles.bulkBtn, { backgroundColor: '#166534' }]} onPress={() => handleBulkAction('start')} disabled={bulkLoading}>
-              <Text style={styles.bulkBtnText}>Start</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.bulkBtn, { backgroundColor: '#991B1B' }]} onPress={() => handleBulkAction('stop')} disabled={bulkLoading}>
-              <Text style={styles.bulkBtnText}>Stop</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.bulkBtn, { backgroundColor: '#1E40AF' }]} onPress={() => handleBulkAction('restart')} disabled={bulkLoading}>
-              <Text style={styles.bulkBtnText}>Restart</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      </ScrollView>
 
+      {/* Container list */}
       <FlatList
         data={filtered}
         renderItem={({ item }) => (
@@ -150,40 +206,180 @@ export default function ContainersScreen() {
             container={item}
             onPress={() => bulkMode ? toggleSelect(item.id) : router.push(`/containers/${item.id}`)}
             onLongPress={() => { setBulkMode(true); toggleSelect(item.id); }}
-            selected={selectedIds.has(item.id)}
+            selected={bulkMode ? selectedIds.has(item.id) : undefined}
             showQuickActions={!bulkMode}
             onQuickAction={handleQuickAction}
           />
         )}
         keyExtractor={(item) => item.id}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60A5FA" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.blue} />
         }
         contentContainerStyle={styles.list}
         ListEmptyComponent={<Text style={styles.empty}>No containers found</Text>}
       />
+
+      {/* Floating bulk action bar */}
+      {bulkMode && selectedIds.size > 0 && (
+        <View style={styles.bulkBar}>
+          <View style={styles.bulkInner}>
+            <Text style={styles.bulkCount}>{selectedIds.size} selected</Text>
+            <View style={styles.bulkActions}>
+              <TouchableOpacity
+                style={[styles.bulkBtn, { backgroundColor: COLORS.green + '26' }]}
+                onPress={() => handleBulkAction('start')}
+                disabled={bulkLoading}
+              >
+                <Text style={[styles.bulkBtnIcon, { color: COLORS.green }]}>{'\u25B6'}</Text>
+                <Text style={[styles.bulkBtnText, { color: COLORS.green }]}>Start</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.bulkBtn, { backgroundColor: COLORS.red + '26' }]}
+                onPress={() => handleBulkAction('stop')}
+                disabled={bulkLoading}
+              >
+                <Text style={[styles.bulkBtnIcon, { color: COLORS.red }]}>{'\u25A0'}</Text>
+                <Text style={[styles.bulkBtnText, { color: COLORS.red }]}>Stop</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.bulkBtn, { backgroundColor: COLORS.blue + '26' }]}
+                onPress={() => handleBulkAction('restart')}
+                disabled={bulkLoading}
+              >
+                <Text style={[styles.bulkBtnIcon, { color: COLORS.blue }]}>{'\u21BB'}</Text>
+                <Text style={[styles.bulkBtnText, { color: COLORS.blue }]}>Restart</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D0D' },
-  search: {
-    backgroundColor: '#111827', margin: 16, marginBottom: 8, borderRadius: 10,
-    padding: 12, color: '#F9FAFB', fontSize: 15, borderWidth: 1, borderColor: '#1F2937',
+  container: { flex: 1, backgroundColor: COLORS.bg },
+
+  summaryBar: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
-  filterRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 6, marginBottom: 8 },
-  filterBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#1F2937' },
-  filterBtnActive: { backgroundColor: '#2563EB' },
-  filterText: { color: '#9CA3AF', fontSize: 12, fontWeight: '500' },
-  filterTextActive: { color: '#fff' },
-  bulkBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, marginBottom: 8 },
-  bulkToggle: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: '#1F2937' },
-  bulkToggleActive: { backgroundColor: '#7C3AED' },
-  bulkToggleText: { color: '#D1D5DB', fontSize: 12, fontWeight: '500' },
-  bulkActions: { flexDirection: 'row', gap: 6 },
-  bulkBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  bulkBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  list: { paddingHorizontal: 16, paddingBottom: 20 },
-  empty: { color: '#6B7280', fontSize: 14, textAlign: 'center', marginTop: 40 },
+  summaryText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    margin: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  search: {
+    flex: 1,
+    paddingVertical: 12,
+    color: COLORS.textPrimary,
+    fontSize: 15,
+  },
+
+  filterScroll: {
+    maxHeight: 52,
+    marginBottom: 8,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 8,
+    alignItems: 'center',
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+    minHeight: 44,
+  },
+  filterText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  filterCount: {
+    backgroundColor: COLORS.border,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    minWidth: 22,
+    alignItems: 'center',
+  },
+  filterCountText: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  list: { paddingHorizontal: 16, paddingBottom: 100 },
+  empty: { color: COLORS.textTertiary, fontSize: 14, textAlign: 'center', marginTop: 60 },
+
+  bulkBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+    paddingTop: 12,
+    backgroundColor: COLORS.bg + 'EE',
+  },
+  bulkInner: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.purple + '44',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bulkCount: {
+    color: COLORS.purple,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bulkActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  bulkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  bulkBtnIcon: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bulkBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });

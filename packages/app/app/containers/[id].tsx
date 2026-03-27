@@ -1,12 +1,27 @@
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { apiFetch } from '../../src/lib/api';
 import { useServerStore } from '../../src/stores/serverStore';
-import StatusBadge from '../../src/components/StatusBadge';
-import MetricGauge from '../../src/components/MetricGauge';
 import LogViewer from '../../src/components/LogViewer';
 import ActionSheet from '../../src/components/ActionSheet';
+
+const COLORS = {
+  bg: '#1C1C1E',
+  card: '#2C2C2E',
+  border: '#3A3A3C',
+  blue: '#4A90FF',
+  green: '#34D399',
+  red: '#FF6B6B',
+  purple: '#A78BFA',
+  orange: '#FB923C',
+  yellow: '#FBBF24',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#8E8E93',
+  textTertiary: '#636366',
+  terminal: '#0A0A0A',
+  terminalText: '#86EFAC',
+};
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -17,6 +32,49 @@ function formatBytes(bytes: number): string {
 }
 
 type Tab = 'stats' | 'logs' | 'exec' | 'env' | 'processes';
+
+function RingGauge({ value, color, size = 80 }: { value: number; color: string; size?: number }) {
+  const clampedValue = Math.min(Math.max(value, 0), 100);
+  const strokeWidth = 6;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = (clampedValue / 100) * circumference;
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Background ring using View border trick */}
+      <View style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: strokeWidth,
+        borderColor: COLORS.border,
+        position: 'absolute',
+      }} />
+      {/* Foreground arc approximation using a colored border + rotation */}
+      <View style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: strokeWidth,
+        borderColor: 'transparent',
+        borderTopColor: color,
+        borderRightColor: clampedValue > 25 ? color : 'transparent',
+        borderBottomColor: clampedValue > 50 ? color : 'transparent',
+        borderLeftColor: clampedValue > 75 ? color : 'transparent',
+        position: 'absolute',
+        transform: [{ rotate: '-45deg' }],
+      }} />
+      {/* Center label */}
+      <Text style={{ color: COLORS.textPrimary, fontSize: 18, fontWeight: '800' }}>
+        {clampedValue.toFixed(1)}
+      </Text>
+      <Text style={{ color: COLORS.textTertiary, fontSize: 9, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 1 }}>
+        %
+      </Text>
+    </View>
+  );
+}
 
 export default function ContainerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,6 +87,7 @@ export default function ContainerDetailScreen() {
   const [logs, setLogs] = useState<string[]>([]);
   const [processes, setProcesses] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [showAction, setShowAction] = useState<'start' | 'stop' | 'restart' | 'rebuild' | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('stats');
@@ -44,11 +103,13 @@ export default function ContainerDetailScreen() {
 
   const fetchDetail = useCallback(async () => {
     try {
+      setFetchError(null);
       const data = await apiFetch<any>(`/api/containers/${id}`);
       setDetail(data.container);
       setStats(data.stats);
     } catch (err) {
       console.error('Failed to fetch container:', err);
+      setFetchError(err instanceof Error ? err.message : 'Failed to load container');
     }
   }, [id]);
 
@@ -130,63 +191,127 @@ export default function ContainerDetailScreen() {
   const state = detail?.State?.Status || 'unknown';
   const restartCount = detail?.State?.RestartCount ?? 0;
   const envVars = detail?.Config?.Env || [];
+  const imageStr = detail?.Config?.Image || '';
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'stats', label: 'Stats' },
-    { key: 'logs', label: 'Logs' },
-    { key: 'exec', label: 'Exec' },
-    { key: 'env', label: 'Env' },
-    { key: 'processes', label: 'Top' },
+  const statusColor = state === 'running' ? COLORS.green : COLORS.red;
+  const statusLabel = state === 'running' ? 'Running' : state === 'exited' ? 'Stopped' : state.charAt(0).toUpperCase() + state.slice(1);
+
+  const tabs: { key: Tab; label: string; icon: string }[] = [
+    { key: 'stats', label: 'Stats', icon: '\u{1F4CA}' },
+    { key: 'logs', label: 'Logs', icon: '\u{1F4C4}' },
+    { key: 'exec', label: 'Exec', icon: '\u{1F4BB}' },
+    { key: 'env', label: 'Env', icon: '\u{1F511}' },
+    { key: 'processes', label: 'Top', icon: '\u{2699}' },
   ];
 
   return (
     <>
-      <Stack.Screen options={{ title: name, headerBackTitle: 'Back' }} />
+      <Stack.Screen options={{
+        title: name,
+        headerBackTitle: 'Back',
+        headerStyle: { backgroundColor: COLORS.bg },
+        headerTintColor: COLORS.textPrimary,
+      }} />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60A5FA" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.blue} />}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <StatusBadge status={state} />
-          <Text style={styles.image}>{detail?.Config?.Image}</Text>
-          {restartCount > 0 && <Text style={styles.restarts}>{'\u26A0'} Restarts: {restartCount}</Text>}
-        </View>
-
-        {/* Actions */}
-        {canAct && (
-          <View style={styles.actions}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#166534' }]} onPress={() => setShowAction('start')} disabled={state === 'running'}>
-              <Text style={styles.actionText}>{'\u25B6'} Start</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#991B1B' }]} onPress={() => setShowAction('stop')} disabled={state !== 'running'}>
-              <Text style={styles.actionText}>{'\u25A0'} Stop</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#1E40AF' }]} onPress={() => setShowAction('restart')}>
-              <Text style={styles.actionText}>{'\u21BB'} Restart</Text>
-            </TouchableOpacity>
-            {isAdmin && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#7C2D12' }]} onPress={() => setShowAction('rebuild')}>
-                <Text style={styles.actionText}>{'\u{1F4A3}'} Rebuild</Text>
-              </TouchableOpacity>
-            )}
+        {/* Loading State */}
+        {!detail && !fetchError && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.blue} />
+            <Text style={styles.loadingText}>Loading container...</Text>
           </View>
         )}
 
-        {/* Tab Bar */}
-        <View style={styles.tabRow}>
+        {/* Error State */}
+        {fetchError && (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorIcon}>{'\u26A0'}</Text>
+            <Text style={styles.errorText}>{fetchError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={fetchDetail} accessibilityRole="button" accessibilityLabel="Retry loading">
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Hero Section */}
+        <View style={styles.heroCard}>
+          <View style={[styles.heroBadge, { backgroundColor: statusColor + '1A' }]}>
+            <View style={[styles.heroDot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.heroStatus, { color: statusColor }]}>{statusLabel}</Text>
+          </View>
+          <Text style={styles.heroName}>{name}</Text>
+          <Text style={styles.heroImage}>{imageStr}</Text>
+          {restartCount > 0 && (
+            <View style={styles.restartBadge}>
+              <Text style={styles.restartText}>{'\u26A0'} {restartCount} restart{restartCount > 1 ? 's' : ''}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Action buttons */}
+        {canAct && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionPill, { backgroundColor: COLORS.green + '1A' }]}
+              onPress={() => setShowAction('start')}
+              disabled={state === 'running'}
+              accessibilityRole="button"
+              accessibilityLabel="Start container"
+            >
+              <Text style={[styles.actionIcon, { color: COLORS.green }]}>{'\u25B6'}</Text>
+              <Text style={[styles.actionLabel, { color: COLORS.green, opacity: state === 'running' ? 0.4 : 1 }]}>Start</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionPill, { backgroundColor: COLORS.red + '1A' }]}
+              onPress={() => setShowAction('stop')}
+              disabled={state !== 'running'}
+              accessibilityRole="button"
+              accessibilityLabel="Stop container"
+            >
+              <Text style={[styles.actionIcon, { color: COLORS.red }]}>{'\u25A0'}</Text>
+              <Text style={[styles.actionLabel, { color: COLORS.red, opacity: state !== 'running' ? 0.4 : 1 }]}>Stop</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionPill, { backgroundColor: COLORS.blue + '1A' }]}
+              onPress={() => setShowAction('restart')}
+              accessibilityRole="button"
+              accessibilityLabel="Restart container"
+            >
+              <Text style={[styles.actionIcon, { color: COLORS.blue }]}>{'\u21BB'}</Text>
+              <Text style={[styles.actionLabel, { color: COLORS.blue }]}>Restart</Text>
+            </TouchableOpacity>
+            {isAdmin && (
+              <TouchableOpacity
+                style={[styles.actionPill, { backgroundColor: COLORS.orange + '1A' }]}
+                onPress={() => setShowAction('rebuild')}
+                accessibilityRole="button"
+                accessibilityLabel="Rebuild container"
+              >
+                <Text style={[styles.actionIcon, { color: COLORS.orange }]}>{'\u{1F4A3}'}</Text>
+                <Text style={[styles.actionLabel, { color: COLORS.orange }]}>Rebuild</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        )}
+
+        {/* Segmented Tab Bar */}
+        <View style={styles.segmentedControl}>
           {tabs.map((t) => (
             <TouchableOpacity
               key={t.key}
-              style={[styles.tab, activeTab === t.key && styles.tabActive]}
+              style={[styles.segment, activeTab === t.key && styles.segmentActive]}
               onPress={() => {
                 setActiveTab(t.key);
                 if (t.key === 'logs') fetchLogs();
                 if (t.key === 'processes') fetchProcesses();
               }}
             >
-              <Text style={[styles.tabText, activeTab === t.key && styles.tabTextActive]}>{t.label}</Text>
+              <Text style={[styles.segmentText, activeTab === t.key && styles.segmentTextActive]}>
+                {t.label}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -194,52 +319,88 @@ export default function ContainerDetailScreen() {
         {/* Stats Tab */}
         {activeTab === 'stats' && stats && (
           <View>
-            <MetricGauge label="CPU" value={stats.cpuPercent} />
-            <MetricGauge label="Memory" value={stats.memoryPercent} detail={`${formatBytes(stats.memoryUsage)} / ${formatBytes(stats.memoryLimit)}`} />
+            {/* 2x2 stat grid */}
             <View style={styles.statGrid}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{formatBytes(stats.networkRx)}</Text>
-                <Text style={styles.statLabel}>Net RX</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>CPU</Text>
+                <RingGauge value={stats.cpuPercent} color={COLORS.blue} />
               </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{formatBytes(stats.networkTx)}</Text>
-                <Text style={styles.statLabel}>Net TX</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>MEMORY</Text>
+                <RingGauge value={stats.memoryPercent} color={COLORS.purple} />
+                <Text style={styles.statDetail}>
+                  {formatBytes(stats.memoryUsage)} / {formatBytes(stats.memoryLimit)}
+                </Text>
               </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{stats.pids}</Text>
-                <Text style={styles.statLabel}>PIDs</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>NETWORK RX</Text>
+                <Text style={styles.statBigNumber}>{formatBytes(stats.networkRx)}</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>NETWORK TX</Text>
+                <Text style={styles.statBigNumber}>{formatBytes(stats.networkTx)}</Text>
               </View>
             </View>
+            {/* PIDs row */}
+            <View style={styles.pidsRow}>
+              <Text style={styles.statLabel}>PIDS</Text>
+              <Text style={styles.pidsValue}>{stats.pids}</Text>
+            </View>
           </View>
+        )}
+        {activeTab === 'stats' && !stats && (
+          <Text style={styles.noData}>Loading stats...</Text>
         )}
 
         {/* Logs Tab */}
         {activeTab === 'logs' && (
           <View>
             <View style={styles.logSearchRow}>
-              <TextInput
-                style={styles.logSearchInput}
-                placeholder="Search logs (regex)..."
-                placeholderTextColor="#6B7280"
-                value={logSearch}
-                onChangeText={setLogSearch}
-                onSubmitEditing={handleLogSearch}
-                returnKeyType="search"
-              />
+              <View style={styles.logSearchContainer}>
+                <Text style={styles.logSearchIcon}>{'\u{1F50D}'}</Text>
+                <TextInput
+                  style={styles.logSearchInput}
+                  placeholder="Search logs (regex)..."
+                  placeholderTextColor={COLORS.textTertiary}
+                  value={logSearch}
+                  onChangeText={setLogSearch}
+                  onSubmitEditing={handleLogSearch}
+                  returnKeyType="search"
+                />
+              </View>
               <TouchableOpacity style={styles.logSearchBtn} onPress={handleLogSearch}>
-                <Text style={styles.logSearchBtnText}>{'\u{1F50D}'}</Text>
+                <Text style={styles.logSearchBtnText}>Search</Text>
               </TouchableOpacity>
             </View>
             {logSearchResults ? (
               <View>
-                <Text style={styles.searchResultLabel}>{logSearchResults.length} matches</Text>
-                <LogViewer lines={logSearchResults.map((m: any) => m.line)} />
-                <TouchableOpacity onPress={() => setLogSearchResults(null)} style={styles.clearSearch}>
-                  <Text style={styles.clearSearchText}>Clear search</Text>
-                </TouchableOpacity>
+                <View style={styles.searchResultBar}>
+                  <Text style={styles.searchResultLabel}>{logSearchResults.length} matches</Text>
+                  <TouchableOpacity onPress={() => setLogSearchResults(null)}>
+                    <Text style={styles.clearSearchText}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.terminalContainer}>
+                  {logSearchResults.map((m: any, i: number) => (
+                    <View key={i} style={styles.logLine}>
+                      <Text style={styles.logLineNumber}>{i + 1}</Text>
+                      <Text style={styles.logLineText}>{m.line}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             ) : (
-              <View style={styles.logSection}><LogViewer lines={logs} /></View>
+              <View style={styles.terminalContainer}>
+                {logs.map((line, i) => (
+                  <View key={i} style={styles.logLine}>
+                    <Text style={styles.logLineNumber}>{i + 1}</Text>
+                    <Text style={styles.logLineText}>{line}</Text>
+                  </View>
+                ))}
+                {logs.length === 0 && (
+                  <Text style={styles.terminalPlaceholder}>No logs available</Text>
+                )}
+              </View>
             )}
           </View>
         )}
@@ -251,78 +412,102 @@ export default function ContainerDetailScreen() {
               <>
                 <Text style={styles.execHint}>Run a command inside this container (whitelisted commands only)</Text>
                 <View style={styles.execRow}>
-                  <TextInput
-                    style={styles.execInput}
-                    placeholder="e.g. hostname, df -h, ps aux..."
-                    placeholderTextColor="#6B7280"
-                    value={execCmd}
-                    onChangeText={setExecCmd}
-                    onSubmitEditing={handleExec}
-                    returnKeyType="send"
-                    autoCapitalize="none"
-                  />
+                  <View style={styles.execInputContainer}>
+                    <Text style={styles.execPrompt}>$</Text>
+                    <TextInput
+                      style={styles.execInput}
+                      placeholder="e.g. hostname, df -h, ps aux..."
+                      placeholderTextColor={COLORS.textTertiary}
+                      value={execCmd}
+                      onChangeText={setExecCmd}
+                      onSubmitEditing={handleExec}
+                      returnKeyType="send"
+                      autoCapitalize="none"
+                    />
+                  </View>
                   <TouchableOpacity style={styles.execBtn} onPress={handleExec} disabled={execLoading}>
                     <Text style={styles.execBtnText}>{execLoading ? '...' : 'Run'}</Text>
                   </TouchableOpacity>
                 </View>
                 {execOutput !== null && (
-                  <View style={styles.execOutput}>
-                    <LogViewer lines={execOutput.split('\n')} autoScroll={false} />
+                  <View style={styles.terminalContainer}>
+                    {execOutput.split('\n').map((line, i) => (
+                      <View key={i} style={styles.logLine}>
+                        <Text style={styles.logLineNumber}>{i + 1}</Text>
+                        <Text style={[
+                          styles.logLineText,
+                          line.startsWith('$') && { color: COLORS.blue },
+                          line.startsWith('[exit:') && { color: COLORS.textTertiary },
+                          line.startsWith('Error:') && { color: COLORS.red },
+                        ]}>{line}</Text>
+                      </View>
+                    ))}
                   </View>
                 )}
                 <View style={styles.quickCmds}>
-                  <Text style={styles.quickCmdsLabel}>Quick commands:</Text>
-                  {['hostname', 'uptime', 'df -h', 'ps aux', 'env', 'cat /etc/os-release'].map((cmd) => (
-                    <TouchableOpacity key={cmd} style={styles.quickCmd} onPress={() => setExecCmd(cmd)}>
-                      <Text style={styles.quickCmdText}>{cmd}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  <Text style={styles.quickCmdsLabel}>QUICK COMMANDS</Text>
+                  <View style={styles.quickCmdRow}>
+                    {['hostname', 'uptime', 'df -h', 'ps aux', 'env', 'cat /etc/os-release'].map((cmd) => (
+                      <TouchableOpacity key={cmd} style={styles.quickCmd} onPress={() => setExecCmd(cmd)}>
+                        <Text style={styles.quickCmdText}>{cmd}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </>
             ) : (
-              <Text style={styles.noAccess}>Admin role required for exec</Text>
+              <View style={styles.noAccessCard}>
+                <Text style={styles.noAccessIcon}>{'\u{1F512}'}</Text>
+                <Text style={styles.noAccessText}>Admin role required for exec</Text>
+              </View>
             )}
           </View>
         )}
 
         {/* Env Tab */}
         {activeTab === 'env' && (
-          <View>
+          <View style={styles.envContainer}>
+            <View style={styles.envHeader}>
+              <Text style={[styles.envHeaderCell, { flex: 0.4 }]}>KEY</Text>
+              <Text style={styles.envHeaderCell}>VALUE</Text>
+            </View>
             {envVars.map((env: string, i: number) => {
               const [key, ...rest] = env.split('=');
               const val = rest.join('=');
               const isSensitive = /password|secret|key|token|api/i.test(key);
               return (
-                <View key={i} style={styles.envRow}>
-                  <Text style={styles.envKey}>{key}</Text>
-                  <Text style={styles.envVal} numberOfLines={1}>
-                    {isSensitive ? '••••••••' : val}
+                <View key={i} style={[styles.envRow, i % 2 === 0 && styles.envRowAlt]}>
+                  <Text style={styles.envKey} numberOfLines={1}>{key}</Text>
+                  <Text style={[styles.envVal, isSensitive && styles.envValMasked]} numberOfLines={1}>
+                    {isSensitive ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : val}
                   </Text>
                 </View>
               );
             })}
-            {envVars.length === 0 && <Text style={styles.noAccess}>No environment variables</Text>}
+            {envVars.length === 0 && (
+              <Text style={styles.noData}>No environment variables</Text>
+            )}
           </View>
         )}
 
         {/* Processes Tab */}
         {activeTab === 'processes' && (
-          <View>
+          <View style={styles.processContainer}>
             {processes?.Titles && (
               <View style={styles.processHeader}>
                 {processes.Titles.map((t: string, i: number) => (
-                  <Text key={i} style={[styles.processCell, i === 0 && { flex: 0, width: 50 }]}>{t}</Text>
+                  <Text key={i} style={[styles.processHeaderCell, i === 0 && { flex: 0, width: 50 }]}>{t}</Text>
                 ))}
               </View>
             )}
             {(processes?.Processes || []).map((proc: string[], i: number) => (
-              <View key={i} style={styles.processRow}>
+              <View key={i} style={[styles.processRow, i % 2 === 0 && styles.processRowAlt]}>
                 {proc.map((cell, j) => (
-                  <Text key={j} style={[styles.processCell, styles.processCellData, j === 0 && { flex: 0, width: 50 }]} numberOfLines={1}>{cell}</Text>
+                  <Text key={j} style={[styles.processCell, j === 0 && { flex: 0, width: 50 }]} numberOfLines={1}>{cell}</Text>
                 ))}
               </View>
             ))}
-            {!processes && <Text style={styles.noAccess}>Loading processes...</Text>}
+            {!processes && <Text style={styles.noData}>Loading processes...</Text>}
           </View>
         )}
       </ScrollView>
@@ -334,7 +519,7 @@ export default function ContainerDetailScreen() {
           ? `This will STOP, REMOVE, and PULL latest image for "${name}". You'll need to recreate it via docker-compose.`
           : `Are you sure you want to ${showAction} "${name}"?`}
         confirmLabel={showAction ? showAction.charAt(0).toUpperCase() + showAction.slice(1) : ''}
-        confirmColor={showAction === 'stop' || showAction === 'rebuild' ? '#EF4444' : showAction === 'start' ? '#22C55E' : '#2563EB'}
+        confirmColor={showAction === 'stop' || showAction === 'rebuild' ? COLORS.red : showAction === 'start' ? COLORS.green : COLORS.blue}
         onConfirm={handleAction}
         onCancel={() => setShowAction(null)}
         loading={actionLoading}
@@ -344,47 +529,493 @@ export default function ContainerDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D0D' },
-  content: { padding: 20, paddingBottom: 40 },
-  header: { marginBottom: 20 },
-  image: { color: '#6B7280', fontSize: 13, marginTop: 8 },
-  restarts: { color: '#F59E0B', fontSize: 13, marginTop: 4 },
-  actions: { flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' },
-  actionBtn: { flex: 1, minWidth: 70, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  tabRow: { flexDirection: 'row', gap: 6, marginBottom: 16, flexWrap: 'wrap' },
-  tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#1F2937' },
-  tabActive: { backgroundColor: '#2563EB' },
-  tabText: { color: '#9CA3AF', fontSize: 13, fontWeight: '500' },
-  tabTextActive: { color: '#fff' },
-  statGrid: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  statItem: { flex: 1, backgroundColor: '#111827', borderRadius: 10, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1F2937' },
-  statValue: { color: '#F9FAFB', fontSize: 15, fontWeight: '700' },
-  statLabel: { color: '#6B7280', fontSize: 11, marginTop: 4 },
-  logSection: { height: 400 },
-  logSearchRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  logSearchInput: { flex: 1, backgroundColor: '#111827', borderRadius: 8, padding: 10, color: '#F9FAFB', fontSize: 14, borderWidth: 1, borderColor: '#1F2937' },
-  logSearchBtn: { backgroundColor: '#2563EB', borderRadius: 8, paddingHorizontal: 14, justifyContent: 'center' },
-  logSearchBtnText: { fontSize: 16 },
-  searchResultLabel: { color: '#60A5FA', fontSize: 12, marginBottom: 8 },
-  clearSearch: { marginTop: 8, alignItems: 'center' },
-  clearSearchText: { color: '#60A5FA', fontSize: 13 },
-  execHint: { color: '#6B7280', fontSize: 12, marginBottom: 10 },
-  execRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  execInput: { flex: 1, backgroundColor: '#111827', borderRadius: 8, padding: 10, color: '#22C55E', fontSize: 14, fontFamily: 'monospace', borderWidth: 1, borderColor: '#1F2937' },
-  execBtn: { backgroundColor: '#22C55E', borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center' },
-  execBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
-  execOutput: { height: 200, marginBottom: 12 },
-  quickCmds: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  quickCmdsLabel: { color: '#6B7280', fontSize: 12, width: '100%', marginBottom: 4 },
-  quickCmd: { backgroundColor: '#1F2937', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  quickCmdText: { color: '#D1D5DB', fontSize: 12, fontFamily: 'monospace' },
-  envRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
-  envKey: { color: '#60A5FA', fontSize: 12, fontFamily: 'monospace', width: '40%' },
-  envVal: { color: '#D1D5DB', fontSize: 12, fontFamily: 'monospace', flex: 1 },
-  processHeader: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#374151' },
-  processRow: { flexDirection: 'row', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#1F2937' },
-  processCell: { color: '#9CA3AF', fontSize: 10, fontFamily: 'monospace', flex: 1, fontWeight: '600' },
-  processCellData: { color: '#D1D5DB', fontWeight: '400' },
-  noAccess: { color: '#6B7280', fontSize: 14, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  content: { padding: 16, paddingBottom: 40 },
+
+  // Hero
+  heroCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 8,
+    marginBottom: 12,
+  },
+  heroDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  heroStatus: {
+    fontSize: 14,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  heroName: {
+    color: COLORS.textPrimary,
+    fontSize: 24,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  heroImage: {
+    color: COLORS.textTertiary,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  restartBadge: {
+    backgroundColor: COLORS.yellow + '1A',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  restartText: {
+    color: COLORS.yellow,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Actions
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    paddingVertical: 2,
+  },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 24,
+    gap: 8,
+    minHeight: 44,
+  },
+  actionIcon: {
+    fontSize: 14,
+  },
+  actionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Segmented control
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 3,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  segmentActive: {
+    backgroundColor: COLORS.blue,
+  },
+  segmentText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  segmentTextActive: {
+    color: COLORS.textPrimary,
+  },
+
+  // Stats
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  statCard: {
+    width: '48%',
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    minHeight: 140,
+    justifyContent: 'center',
+  },
+  statLabel: {
+    color: COLORS.textTertiary,
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  statDetail: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginTop: 6,
+  },
+  statBigNumber: {
+    color: COLORS.textPrimary,
+    fontSize: 32,
+    fontWeight: '800',
+  },
+  pidsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  pidsValue: {
+    color: COLORS.textPrimary,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+
+  // Logs
+  logSearchRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  logSearchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  logSearchIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  logSearchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    color: COLORS.textPrimary,
+    fontSize: 14,
+  },
+  logSearchBtn: {
+    backgroundColor: COLORS.blue,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  logSearchBtnText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  searchResultBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  searchResultLabel: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  clearSearchText: {
+    color: COLORS.blue,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  terminalContainer: {
+    backgroundColor: COLORS.terminal,
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 200,
+    maxHeight: 420,
+  },
+  logLine: {
+    flexDirection: 'row',
+    paddingVertical: 1,
+  },
+  logLineNumber: {
+    color: COLORS.textTertiary,
+    fontSize: 11,
+    fontFamily: 'monospace',
+    width: 36,
+    textAlign: 'right',
+    marginRight: 12,
+    opacity: 0.6,
+  },
+  logLineText: {
+    color: COLORS.terminalText,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    flex: 1,
+  },
+  terminalPlaceholder: {
+    color: COLORS.textTertiary,
+    fontSize: 13,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 40,
+  },
+
+  // Exec
+  execHint: {
+    color: COLORS.textTertiary,
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  execRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  execInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.terminal,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  execPrompt: {
+    color: COLORS.green,
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    marginRight: 8,
+  },
+  execInput: {
+    flex: 1,
+    paddingVertical: 12,
+    color: COLORS.green,
+    fontSize: 14,
+    fontFamily: 'monospace',
+  },
+  execBtn: {
+    backgroundColor: COLORS.green,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  execBtnText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  quickCmds: {
+    marginTop: 8,
+  },
+  quickCmdsLabel: {
+    color: COLORS.textTertiary,
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  quickCmdRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickCmd: {
+    backgroundColor: COLORS.card,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  quickCmdText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontFamily: 'monospace',
+  },
+
+  // Env
+  envContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  envHeader: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.border + '44',
+  },
+  envHeaderCell: {
+    color: COLORS.textTertiary,
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    flex: 0.6,
+  },
+  envRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border + '44',
+  },
+  envRowAlt: {
+    backgroundColor: COLORS.border + '22',
+  },
+  envKey: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    fontWeight: '600',
+    flex: 0.4,
+    marginRight: 8,
+  },
+  envVal: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    flex: 0.6,
+  },
+  envValMasked: {
+    color: COLORS.textTertiary,
+    letterSpacing: 2,
+  },
+
+  // Processes
+  processContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  processHeader: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.border + '44',
+  },
+  processHeaderCell: {
+    color: COLORS.textTertiary,
+    fontSize: 10,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    flex: 1,
+  },
+  processRow: {
+    flexDirection: 'row',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border + '22',
+  },
+  processRowAlt: {
+    backgroundColor: COLORS.border + '22',
+  },
+  processCell: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontFamily: 'monospace',
+    flex: 1,
+  },
+
+  // Loading & Error
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 16,
+  },
+  loadingText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  errorCard: {
+    backgroundColor: COLORS.red + '12',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.red + '40',
+    padding: 20,
+    marginBottom: 16,
+    alignItems: 'center',
+    gap: 10,
+  },
+  errorIcon: {
+    fontSize: 28,
+  },
+  errorText: {
+    color: COLORS.red,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryBtn: {
+    backgroundColor: COLORS.red + '1A',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  retryBtnText: {
+    color: COLORS.red,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Shared
+  noData: {
+    color: COLORS.textTertiary,
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 30,
+  },
+  noAccessCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 30,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  noAccessIcon: {
+    fontSize: 32,
+    marginBottom: 10,
+  },
+  noAccessText: {
+    color: COLORS.textTertiary,
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
 });

@@ -1,12 +1,28 @@
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useServerStore } from '../../src/stores/serverStore';
 import { useDashboardStore, type ContainerSummary } from '../../src/stores/dashboardStore';
 import { apiFetch } from '../../src/lib/api';
-import MetricGauge from '../../src/components/MetricGauge';
-import StatusBadge from '../../src/components/StatusBadge';
 import { useRouter } from 'expo-router';
 
+/* ─── Design tokens ─── */
+const T = {
+  bg: '#1C1C1E',
+  card: '#2C2C2E',
+  border: '#3A3A3C',
+  blue: '#4A90FF',
+  green: '#34D399',
+  red: '#FF6B6B',
+  purple: '#A78BFA',
+  orange: '#FB923C',
+  yellow: '#FBBF24',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#8E8E93',
+  textTertiary: '#636366',
+  radius: 16,
+};
+
+/* ─── Helpers ─── */
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -24,6 +40,132 @@ function formatUptime(seconds: number): string {
   return `${m}m`;
 }
 
+/* ─── Circular Progress Ring ─── */
+function ProgressRing({
+  size,
+  strokeWidth,
+  percent,
+  color,
+}: {
+  size: number;
+  strokeWidth: number;
+  percent: number;
+  color: string;
+}) {
+  // We build a ring out of two half-circles clipped by wrapper views.
+  // percent 0-100 maps to 0-360 degrees.
+  const radius = size / 2;
+  const clampedPercent = Math.min(Math.max(percent, 0), 100);
+  const degrees = (clampedPercent / 100) * 360;
+
+  const baseCircle = {
+    width: size,
+    height: size,
+    borderRadius: radius,
+    borderWidth: strokeWidth,
+    borderColor: T.border,
+    position: 'absolute' as const,
+  };
+
+  const halfCircle = {
+    width: size,
+    height: size,
+    borderRadius: radius,
+    borderWidth: strokeWidth,
+    borderColor: color,
+    position: 'absolute' as const,
+  };
+
+  // Right half rotation: fills 0-180 degrees
+  const rightDeg = Math.min(degrees, 180);
+  // Left half rotation: fills 180-360 degrees
+  const leftDeg = Math.max(degrees - 180, 0);
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Track ring */}
+      <View style={baseCircle} />
+
+      {/* Right half (0-180 deg) */}
+      <View
+        style={{
+          width: size / 2,
+          height: size,
+          position: 'absolute',
+          right: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <View
+          style={[
+            halfCircle,
+            {
+              right: 0,
+              borderLeftColor: 'transparent',
+              borderBottomColor: 'transparent',
+              transform: [{ rotate: `${rightDeg}deg` }],
+            },
+          ]}
+        />
+      </View>
+
+      {/* Left half (180-360 deg) */}
+      {degrees > 180 && (
+        <View
+          style={{
+            width: size / 2,
+            height: size,
+            position: 'absolute',
+            left: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={[
+              halfCircle,
+              {
+                left: 0,
+                borderRightColor: 'transparent',
+                borderTopColor: 'transparent',
+                transform: [{ rotate: `${leftDeg}deg` }],
+              },
+            ]}
+          />
+        </View>
+      )}
+
+      {/* Center label */}
+      <Text style={{ color: T.textPrimary, fontSize: 14, fontWeight: '700' }}>
+        {clampedPercent.toFixed(0)}%
+      </Text>
+    </View>
+  );
+}
+
+/* ─── Live Indicator (pulsing dot) ─── */
+function LiveIndicator() {
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [opacity]);
+
+  return (
+    <View style={styles.liveContainer}>
+      <Animated.View style={[styles.liveDot, { opacity }]} />
+      <Text style={styles.liveText}>Live</Text>
+    </View>
+  );
+}
+
+/* ─── Main Screen ─── */
 export default function OverviewScreen() {
   const router = useRouter();
   const { serverName, disconnect } = useServerStore();
@@ -48,9 +190,10 @@ export default function OverviewScreen() {
 
   useEffect(() => {
     fetchAll();
-    // Auto-refresh every 30s
     intervalRef.current = setInterval(fetchAll, 30000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [fetchAll]);
 
   const onRefresh = useCallback(async () => {
@@ -60,274 +203,511 @@ export default function OverviewScreen() {
   }, [fetchAll]);
 
   const sys = overview?.system;
-  const problemContainers = containers.filter(c => c.state !== 'running' || c.health === 'unhealthy');
-  const topMemContainers = [...containers]
-    .sort((a, b) => (b.status?.match(/\d+/) ? 1 : 0) - (a.status?.match(/\d+/) ? 1 : 0))
-    .slice(0, 5);
+  const problemContainers = containers.filter(
+    (c) => c.state !== 'running' || c.health === 'unhealthy',
+  );
+
+  const alertColorForState = (state: string, health?: string) =>
+    health === 'unhealthy' ? T.yellow : state === 'running' ? T.green : state === 'exited' ? T.red : T.orange;
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60A5FA" />}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.blue} />
+      }
     >
-      {/* Server Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.headerDot} />
-          <View>
+      {/* ── 1. Server Header ── */}
+      <View style={styles.headerBanner}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
             <Text style={styles.serverName}>{serverName || 'Server'}</Text>
-            {sys && <Text style={styles.uptime}>Up {formatUptime(sys.uptimeSeconds)}</Text>}
+            <View style={styles.headerMeta}>
+              <View style={styles.greenDot} />
+              {sys && (
+                <View style={styles.uptimeBadge}>
+                  <Text style={styles.uptimeText}>Up {formatUptime(sys.uptimeSeconds)}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <View style={styles.headerRight}>
+            <LiveIndicator />
+            <TouchableOpacity
+              style={styles.switchBtn}
+              onPress={() => {
+                disconnect();
+                router.replace('/');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Switch server"
+            >
+              <Text style={styles.switchText}>Switch</Text>
+            </TouchableOpacity>
           </View>
         </View>
-        <TouchableOpacity style={styles.disconnectBtn} onPress={() => { disconnect(); router.replace('/'); }}>
-          <Text style={styles.disconnectText}>Switch</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Quick Stats Row */}
+      {/* ── Loading State ── */}
+      {!overview && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={T.blue} />
+          <Text style={styles.loadingText}>Loading dashboard...</Text>
+        </View>
+      )}
+
+      {/* ── 2. Quick Stat Cards (2x2) ── */}
       {overview && (
-        <View style={styles.quickStats}>
-          <TouchableOpacity style={styles.quickStat} onPress={() => router.push('/(tabs)/containers')}>
-            <Text style={styles.quickStatValue}>{overview.containers.running}</Text>
-            <Text style={styles.quickStatLabel}>Running</Text>
+        <View style={styles.statGrid}>
+          <TouchableOpacity
+            style={styles.statCard}
+            onPress={() => router.push('/(tabs)/containers')}
+          >
+            <View style={[styles.statIcon, { backgroundColor: T.blue + '20' }]}>
+              <Text style={[styles.statIconText, { color: T.blue }]}>C</Text>
+            </View>
+            <Text style={styles.statNumber}>
+              {overview.containers.running + overview.containers.stopped}
+            </Text>
+            <Text style={styles.statLabel}>CONTAINERS</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.quickStat, overview.containers.stopped > 0 && styles.quickStatDanger]} onPress={() => router.push('/(tabs)/containers')}>
-            <Text style={[styles.quickStatValue, overview.containers.stopped > 0 && { color: '#EF4444' }]}>{overview.containers.stopped}</Text>
-            <Text style={styles.quickStatLabel}>Stopped</Text>
+
+          <TouchableOpacity
+            style={styles.statCard}
+            onPress={() => router.push('/(tabs)/containers')}
+          >
+            <View style={[styles.statIcon, { backgroundColor: T.green + '20' }]}>
+              <Text style={[styles.statIconText, { color: T.green }]}>R</Text>
+            </View>
+            <Text style={styles.statNumber}>{overview.containers.running}</Text>
+            <Text style={styles.statLabel}>RUNNING</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickStat} onPress={() => router.push('/(tabs)/stacks')}>
-            <Text style={styles.quickStatValue}>{overview.stacks.total}</Text>
-            <Text style={styles.quickStatLabel}>Stacks</Text>
+
+          <TouchableOpacity
+            style={styles.statCard}
+            onPress={() => router.push('/(tabs)/containers')}
+          >
+            <View style={[styles.statIcon, { backgroundColor: T.red + '20' }]}>
+              <Text style={[styles.statIconText, { color: T.red }]}>S</Text>
+            </View>
+            <Text style={[styles.statNumber, overview.containers.stopped > 0 && { color: T.red }]}>
+              {overview.containers.stopped}
+            </Text>
+            <Text style={styles.statLabel}>STOPPED</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickStat} onPress={() => router.push('/(tabs)/alerts')}>
-            <Text style={[styles.quickStatValue, alerts.length > 0 && { color: '#F59E0B' }]}>{alerts.length}</Text>
-            <Text style={styles.quickStatLabel}>Alerts</Text>
+
+          <TouchableOpacity
+            style={styles.statCard}
+            onPress={() => router.push('/(tabs)/stacks')}
+          >
+            <View style={[styles.statIcon, { backgroundColor: T.purple + '20' }]}>
+              <Text style={[styles.statIconText, { color: T.purple }]}>K</Text>
+            </View>
+            <Text style={styles.statNumber}>{overview.stacks.total}</Text>
+            <Text style={styles.statLabel}>STACKS</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* System Gauges */}
+      {/* ── 3. System Gauges ── */}
       {sys && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>System Resources</Text>
-          <View style={styles.gaugeGrid}>
+          <Text style={styles.sectionHeader}>SYSTEM RESOURCES</Text>
+          <View style={styles.gaugeRow}>
             <View style={styles.gaugeCard}>
-              <Text style={styles.gaugeIcon}>{'\u{1F4BB}'}</Text>
-              <Text style={[styles.gaugeValue, { color: sys.cpuPercent > 80 ? '#EF4444' : sys.cpuPercent > 50 ? '#F59E0B' : '#22C55E' }]}>
-                {sys.cpuPercent.toFixed(1)}%
-              </Text>
+              <ProgressRing size={64} strokeWidth={5} percent={sys.cpuPercent} color={T.blue} />
               <Text style={styles.gaugeLabel}>CPU</Text>
               <Text style={styles.gaugeDetail}>{sys.cpuCount} cores</Text>
             </View>
             <View style={styles.gaugeCard}>
-              <Text style={styles.gaugeIcon}>{'\u{1F9E0}'}</Text>
-              <Text style={[styles.gaugeValue, { color: sys.memory.percent > 85 ? '#EF4444' : sys.memory.percent > 60 ? '#F59E0B' : '#22C55E' }]}>
-                {sys.memory.percent.toFixed(1)}%
-              </Text>
+              <ProgressRing
+                size={64}
+                strokeWidth={5}
+                percent={sys.memory.percent}
+                color={T.purple}
+              />
               <Text style={styles.gaugeLabel}>RAM</Text>
               <Text style={styles.gaugeDetail}>{formatBytes(sys.memory.used)}</Text>
             </View>
             <View style={styles.gaugeCard}>
-              <Text style={styles.gaugeIcon}>{'\u{1F4BE}'}</Text>
-              <Text style={[styles.gaugeValue, { color: sys.disk.percent > 85 ? '#EF4444' : sys.disk.percent > 70 ? '#F59E0B' : '#22C55E' }]}>
-                {sys.disk.percent.toFixed(1)}%
-              </Text>
+              <ProgressRing
+                size={64}
+                strokeWidth={5}
+                percent={sys.disk.percent}
+                color={T.orange}
+              />
               <Text style={styles.gaugeLabel}>Disk</Text>
               <Text style={styles.gaugeDetail}>{formatBytes(sys.disk.used)}</Text>
             </View>
           </View>
-          <View style={styles.loadRow}>
-            <Text style={styles.loadLabel}>Load Avg:</Text>
-            <Text style={styles.loadValue}>{sys.load.load1.toFixed(2)}</Text>
-            <Text style={styles.loadSep}>/</Text>
-            <Text style={styles.loadValue}>{sys.load.load5.toFixed(2)}</Text>
-            <Text style={styles.loadSep}>/</Text>
-            <Text style={styles.loadValue}>{sys.load.load15.toFixed(2)}</Text>
+        </View>
+      )}
+
+      {/* ── 4. Load Average ── */}
+      {sys && (
+        <View style={styles.loadCard}>
+          <Text style={styles.loadTitle}>LOAD AVG</Text>
+          <View style={styles.loadValues}>
+            <Text style={styles.loadNum}>{sys.load.load1.toFixed(2)}</Text>
+            <Text style={styles.loadDot}>{'\u00B7'}</Text>
+            <Text style={styles.loadNum}>{sys.load.load5.toFixed(2)}</Text>
+            <Text style={styles.loadDot}>{'\u00B7'}</Text>
+            <Text style={styles.loadNum}>{sys.load.load15.toFixed(2)}</Text>
           </View>
         </View>
       )}
 
-      {/* Problem Containers */}
+      {/* ── 5. Problem Containers ── */}
       {problemContainers.length > 0 && (
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#EF4444' }]}>{'\u{26A0}'} Attention Required</Text>
-          {problemContainers.map((c) => (
-            <TouchableOpacity
-              key={c.id}
-              style={styles.problemCard}
-              onPress={() => router.push(`/containers/${c.id}`)}
-            >
-              <View style={styles.problemHeader}>
-                <Text style={styles.problemName}>{c.name}</Text>
-                <StatusBadge status={c.health === 'unhealthy' ? 'unhealthy' : c.state} size="sm" />
-              </View>
-              <Text style={styles.problemDetail}>{c.status}</Text>
-            </TouchableOpacity>
-          ))}
+          <Text style={[styles.sectionHeader, { color: T.red }]}>ATTENTION REQUIRED</Text>
+          <View style={styles.problemSection}>
+            {problemContainers.map((c) => (
+              <TouchableOpacity
+                key={c.id}
+                style={styles.problemRow}
+                onPress={() => router.push(`/containers/${c.id}`)}
+              >
+                <View style={styles.problemDot} />
+                <Text style={styles.problemName} numberOfLines={1}>
+                  {c.name}
+                </Text>
+                <Text style={styles.problemState}>
+                  {c.health === 'unhealthy' ? 'unhealthy' : c.state}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
 
-      {/* Stacks Overview */}
-      {stacks.length > 0 && (
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.sectionHeader} onPress={() => router.push('/(tabs)/stacks')}>
-            <Text style={styles.sectionTitle}>Stacks</Text>
-            <Text style={styles.seeAll}>See all {'\u{203A}'}</Text>
-          </TouchableOpacity>
-          {stacks.slice(0, 5).map((s) => (
-            <TouchableOpacity
-              key={s.name}
-              style={styles.stackRow}
-              onPress={() => router.push(`/stacks/${s.name}`)}
-            >
-              <View style={[styles.stackDot, { backgroundColor: s.stopped > 0 ? '#EF4444' : '#22C55E' }]} />
-              <Text style={styles.stackName}>{s.name}</Text>
-              <Text style={styles.stackCount}>{s.running}/{s.containerCount}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Top Containers */}
-      {containers.length > 0 && (
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.sectionHeader} onPress={() => router.push('/(tabs)/containers')}>
-            <Text style={styles.sectionTitle}>Containers</Text>
-            <Text style={styles.seeAll}>All {containers.length} {'\u{203A}'}</Text>
-          </TouchableOpacity>
-          {containers.slice(0, 6).map((c) => (
-            <TouchableOpacity
-              key={c.id}
-              style={styles.containerRow}
-              onPress={() => router.push(`/containers/${c.id}`)}
-            >
-              <View style={[styles.containerDot, { backgroundColor: c.state === 'running' ? '#22C55E' : '#EF4444' }]} />
-              <Text style={styles.containerName} numberOfLines={1}>{c.name}</Text>
-              <Text style={styles.containerStatus}>{c.state}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Recent Alerts */}
+      {/* ── 6. Recent Alerts (timeline) ── */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.sectionHeader} onPress={() => router.push('/(tabs)/alerts')}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          {alerts.length > 0 && <Text style={styles.seeAll}>{alerts.length} alerts {'\u{203A}'}</Text>}
+        <TouchableOpacity
+          style={styles.sectionHeaderRow}
+          onPress={() => router.push('/(tabs)/alerts')}
+        >
+          <Text style={styles.sectionHeader}>RECENT ACTIVITY</Text>
+          {alerts.length > 0 && (
+            <Text style={styles.seeAll}>{alerts.length} alerts ›</Text>
+          )}
         </TouchableOpacity>
+
         {alerts.length === 0 ? (
           <View style={styles.allGood}>
-            <Text style={styles.allGoodIcon}>{'\u{2705}'}</Text>
+            <View style={[styles.allGoodDot, { backgroundColor: T.green }]} />
             <Text style={styles.allGoodText}>All systems operational</Text>
           </View>
         ) : (
-          alerts.slice(0, 3).map((alert, i) => (
-            <View key={i} style={styles.alertItem}>
-              <Text style={styles.alertDot}>
-                {alert.currentState === 'running' ? '\u{1F7E2}' : '\u{1F534}'}
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.alertText}>
-                  {alert.containerName || alert.type}: {alert.currentState || alert.message}
-                </Text>
-                <Text style={styles.alertTime}>{new Date(alert.timestamp).toLocaleTimeString()}</Text>
-              </View>
-            </View>
-          ))
+          <View style={styles.timelineCard}>
+            {alerts.slice(0, 5).map((alert, i) => {
+              const stateColor = alertColorForState(alert.currentState || '');
+              const isLast = i === Math.min(alerts.length, 5) - 1;
+              return (
+                <View key={i} style={styles.timelineItem}>
+                  {/* Vertical line + dot */}
+                  <View style={styles.timelineTrack}>
+                    <View style={[styles.timelineDot, { backgroundColor: stateColor }]} />
+                    {!isLast && <View style={styles.timelineLine} />}
+                  </View>
+                  {/* Content */}
+                  <View style={styles.timelineContent}>
+                    <Text style={styles.timelineName}>
+                      {alert.containerName || alert.type}
+                    </Text>
+                    <Text style={[styles.timelineState, { color: stateColor }]}>
+                      {alert.currentState || alert.message}
+                    </Text>
+                    <Text style={styles.timelineTime}>
+                      {new Date(alert.timestamp).toLocaleTimeString()}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
         )}
       </View>
 
+      {/* Bottom spacer */}
       {overview && (
-        <Text style={styles.lastUpdated}>
-          Auto-refreshing every 30s | {new Date(overview.timestamp).toLocaleTimeString()}
+        <Text style={styles.footer}>
+          Last update {new Date(overview.timestamp).toLocaleTimeString()}
         </Text>
       )}
     </ScrollView>
   );
 }
 
+/* ─── Styles ─── */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D0D' },
-  content: { padding: 16, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: T.bg },
+  content: { padding: 16, paddingBottom: 48 },
 
-  // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingTop: 8 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E' },
-  serverName: { color: '#F9FAFB', fontSize: 22, fontWeight: '800' },
-  uptime: { color: '#6B7280', fontSize: 12 },
-  disconnectBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6, backgroundColor: '#1F2937' },
-  disconnectText: { color: '#9CA3AF', fontSize: 13, fontWeight: '500' },
-
-  // Quick Stats
-  quickStats: { flexDirection: 'row', gap: 8, marginBottom: 24 },
-  quickStat: {
-    flex: 1, backgroundColor: '#111827', borderRadius: 12, padding: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: '#1F2937',
+  /* Header */
+  headerBanner: {
+    marginBottom: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  quickStatDanger: { borderColor: '#7F1D1D' },
-  quickStatValue: { color: '#F9FAFB', fontSize: 28, fontWeight: '800' },
-  quickStatLabel: { color: '#6B7280', fontSize: 11, marginTop: 2 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerLeft: { flex: 1 },
+  serverName: {
+    color: T.textPrimary,
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  greenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: T.green,
+  },
+  uptimeBadge: {
+    backgroundColor: T.green + '18',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  uptimeText: {
+    color: T.green,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  headerRight: { alignItems: 'flex-end', gap: 10 },
+  switchBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: T.card,
+    borderWidth: 1,
+    borderColor: T.border,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  switchText: { color: T.textSecondary, fontSize: 13, fontWeight: '500' },
 
-  // Section
+  /* Live indicator */
+  liveContainer: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: T.green,
+  },
+  liveText: { color: T.green, fontSize: 11, fontWeight: '600' },
+
+  /* Quick stat grid */
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 24,
+  },
+  statCard: {
+    width: '48%' as any,
+    flexGrow: 1,
+    flexBasis: '46%' as any,
+    backgroundColor: T.card,
+    borderRadius: T.radius,
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: 16,
+  },
+  statIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  statIconText: { fontSize: 14, fontWeight: '700' },
+  statNumber: {
+    color: T.textPrimary,
+    fontSize: 32,
+    fontWeight: '800',
+    lineHeight: 36,
+  },
+  statLabel: {
+    color: T.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginTop: 4,
+  },
+
+  /* Section */
   section: { marginBottom: 24 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { color: '#9CA3AF', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2 },
-  seeAll: { color: '#60A5FA', fontSize: 12, fontWeight: '500' },
+  sectionHeader: {
+    color: T.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  seeAll: { color: T.blue, fontSize: 12, fontWeight: '500' },
 
-  // Gauge Grid
-  gaugeGrid: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  /* Gauges */
+  gaugeRow: { flexDirection: 'row', gap: 10 },
   gaugeCard: {
-    flex: 1, backgroundColor: '#111827', borderRadius: 12, padding: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: '#1F2937',
+    flex: 1,
+    backgroundColor: T.card,
+    borderRadius: T.radius,
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 16,
+    alignItems: 'center',
   },
-  gaugeIcon: { fontSize: 20, marginBottom: 6 },
-  gaugeValue: { fontSize: 22, fontWeight: '800' },
-  gaugeLabel: { color: '#9CA3AF', fontSize: 11, fontWeight: '600', marginTop: 2 },
-  gaugeDetail: { color: '#4B5563', fontSize: 10, marginTop: 2 },
-
-  // Load
-  loadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8 },
-  loadLabel: { color: '#6B7280', fontSize: 12 },
-  loadValue: { color: '#D1D5DB', fontSize: 12, fontWeight: '600' },
-  loadSep: { color: '#374151', fontSize: 12 },
-
-  // Problem containers
-  problemCard: {
-    backgroundColor: '#1C1117', borderRadius: 10, padding: 12, marginBottom: 8,
-    borderWidth: 1, borderColor: '#7F1D1D',
+  gaugeLabel: {
+    color: T.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
   },
-  problemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  problemName: { color: '#FCA5A5', fontSize: 14, fontWeight: '600' },
-  problemDetail: { color: '#6B7280', fontSize: 12, marginTop: 4 },
-
-  // Stacks
-  stackRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#111827', borderRadius: 8, padding: 12, marginBottom: 6,
+  gaugeDetail: {
+    color: T.textTertiary,
+    fontSize: 10,
+    marginTop: 2,
   },
-  stackDot: { width: 8, height: 8, borderRadius: 4 },
-  stackName: { color: '#D1D5DB', fontSize: 14, fontWeight: '500', flex: 1 },
-  stackCount: { color: '#6B7280', fontSize: 13, fontWeight: '600' },
 
-  // Containers
-  containerRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1F2937',
+  /* Load average */
+  loadCard: {
+    backgroundColor: T.card,
+    borderRadius: T.radius,
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
   },
-  containerDot: { width: 6, height: 6, borderRadius: 3 },
-  containerName: { color: '#D1D5DB', fontSize: 13, flex: 1 },
-  containerStatus: { color: '#6B7280', fontSize: 12 },
+  loadTitle: {
+    color: T.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  loadValues: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  loadNum: {
+    color: T.textPrimary,
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: 'monospace',
+  },
+  loadDot: { color: T.textTertiary, fontSize: 18 },
 
-  // Alerts
-  allGood: { alignItems: 'center', paddingVertical: 20 },
-  allGoodIcon: { fontSize: 32, marginBottom: 8 },
-  allGoodText: { color: '#22C55E', fontSize: 14, fontWeight: '500' },
-  alertItem: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  alertDot: { fontSize: 10 },
-  alertText: { color: '#D1D5DB', fontSize: 13 },
-  alertTime: { color: '#6B7280', fontSize: 11 },
+  /* Problem containers */
+  problemSection: {
+    backgroundColor: T.red + '0A',
+    borderRadius: T.radius,
+    borderWidth: 1,
+    borderColor: T.red + '30',
+    overflow: 'hidden',
+  },
+  problemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: T.red + '15',
+  },
+  problemDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: T.red,
+  },
+  problemName: {
+    color: T.textPrimary,
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  problemState: {
+    color: T.red,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
 
-  lastUpdated: { color: '#374151', fontSize: 10, textAlign: 'center', marginTop: 8 },
+  /* All good */
+  allGood: {
+    backgroundColor: T.card,
+    borderRadius: T.radius,
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  allGoodDot: { width: 10, height: 10, borderRadius: 5 },
+  allGoodText: { color: T.green, fontSize: 14, fontWeight: '500' },
+
+  /* Timeline */
+  timelineCard: {
+    backgroundColor: T.card,
+    borderRadius: T.radius,
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: 14,
+  },
+  timelineItem: { flexDirection: 'row', minHeight: 48 },
+  timelineTrack: { width: 20, alignItems: 'center' },
+  timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 2 },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: T.border,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  timelineContent: { flex: 1, paddingLeft: 8, paddingBottom: 12 },
+  timelineName: { color: T.textPrimary, fontSize: 13, fontWeight: '600' },
+  timelineState: { fontSize: 12, fontWeight: '500', marginTop: 1 },
+  timelineTime: { color: T.textTertiary, fontSize: 11, marginTop: 2 },
+
+  /* Loading */
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 16,
+  },
+  loadingText: {
+    color: T.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  /* Footer */
+  footer: {
+    color: T.textTertiary,
+    fontSize: 10,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 });

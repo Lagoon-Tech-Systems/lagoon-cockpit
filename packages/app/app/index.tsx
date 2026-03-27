@@ -1,8 +1,19 @@
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
 
 export default function ServerSelectScreen() {
@@ -16,6 +27,8 @@ export default function ServerSelectScreen() {
   const [credential, setCredential] = useState('');
   const [email, setEmail] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadProfiles();
@@ -23,8 +36,10 @@ export default function ServerSelectScreen() {
 
   const handleConnect = async (profile: ServerProfile) => {
     setActiveProfile(profile.id);
+    setError(null);
     try {
       setConnecting(true);
+      setConnectingId(profile.id);
 
       // Pre-flight: test raw connectivity
       try {
@@ -32,35 +47,38 @@ export default function ServerSelectScreen() {
         console.log(`[COCKPIT] Health: ${testRes.status}`);
       } catch (netErr) {
         const msg = netErr instanceof Error ? netErr.message : String(netErr);
-        Alert.alert('Cannot Reach Server', `${profile.url}/health failed:\n\n${msg}`);
+        setError(`Cannot reach ${profile.url}/health\n${msg}`);
         return;
       }
 
       // Try stored credential from SecureStore first
-      const storedCred = Platform.OS === 'web'
-        ? localStorage.getItem(`cockpit_cred_${profile.id}`)
-        : await SecureStore.getItemAsync(`cockpit_cred_${profile.id}`);
+      const storedCred =
+        Platform.OS === 'web'
+          ? localStorage.getItem(`cockpit_cred_${profile.id}`)
+          : await SecureStore.getItemAsync(`cockpit_cred_${profile.id}`);
       if (!storedCred) {
-        Alert.alert('No Credentials', 'Long-press to remove this profile, then add it again with your API key.');
+        setError('No credentials stored. Long-press to remove this profile, then add it again.');
         return;
       }
       await authenticate(profile.id, storedCred, { email });
       router.replace('/(tabs)/overview');
     } catch (err) {
       console.error('[COCKPIT] handleConnect failed:', err);
-      Alert.alert('Connection Failed', err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : 'Unknown connection error');
     } finally {
       setConnecting(false);
+      setConnectingId(null);
     }
   };
 
   const handleAdd = async () => {
+    setError(null);
     if (!name.trim() || !url.trim() || !credential.trim()) {
-      Alert.alert('Missing Fields', 'Name, URL, and credential are required.');
+      setError('Name, URL, and credential are required.');
       return;
     }
     if (authMode === 'login' && !email.trim()) {
-      Alert.alert('Missing Fields', 'Email is required for login auth mode.');
+      setError('Email is required for login auth mode.');
       return;
     }
 
@@ -77,7 +95,9 @@ export default function ServerSelectScreen() {
       } catch (netErr) {
         const msg = netErr instanceof Error ? netErr.message : String(netErr);
         console.error(`[COCKPIT] Pre-flight failed:`, netErr);
-        Alert.alert('Cannot Reach Server', `${cleanUrl}/health failed:\n\n${msg}\n\nCheck that the URL is correct and your VPN is connected.`);
+        setError(
+          `Cannot reach ${cleanUrl}/health\n${msg}\n\nCheck that the URL is correct and your VPN is connected.`,
+        );
         return;
       }
 
@@ -94,7 +114,7 @@ export default function ServerSelectScreen() {
       router.replace('/(tabs)/overview');
     } catch (err) {
       console.error('[COCKPIT] handleAdd failed:', err);
-      Alert.alert('Connection Failed', err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setConnecting(false);
     }
@@ -112,17 +132,45 @@ export default function ServerSelectScreen() {
       style={styles.profileCard}
       onPress={() => handleConnect(item)}
       onLongPress={() => handleDelete(item.id, item.name)}
+      activeOpacity={0.7}
     >
-      <Text style={styles.profileName}>{item.name}</Text>
-      <Text style={styles.profileUrl}>{item.url}</Text>
-      <Text style={styles.profileAuth}>{item.authMode === 'key' ? 'API Key' : 'User Login'}</Text>
+      <View style={styles.cardLeft}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.statusDot}>{'\u{1F7E2}'}</Text>
+          <Text style={styles.profileName}>{item.name}</Text>
+        </View>
+        <Text style={styles.profileUrl}>{item.url}</Text>
+        <View style={styles.authBadge}>
+          <Text style={styles.authBadgeText}>
+            {item.authMode === 'key' ? 'API Key' : 'User Login'}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.cardRight}>
+        {connectingId === item.id ? (
+          <ActivityIndicator size="small" color="#4A90FF" />
+        ) : (
+          <Text style={styles.chevron}>{'\u{203A}'}</Text>
+        )}
+      </View>
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
       <Text style={styles.title}>Lagoon Cockpit</Text>
-      <Text style={styles.subtitle}>Select or add a server</Text>
+      <Text style={styles.subtitle}>Your servers</Text>
+
+      {/* Error card */}
+      {error ? (
+        <View style={styles.errorCard}>
+          <Text style={styles.errorIcon}>{'\u{26A0}'}</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={() => setError(null)} style={styles.errorDismiss}>
+            <Text style={styles.errorDismissText}>{'\u{2715}'}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {profiles.length > 0 && (
         <FlatList
@@ -130,154 +178,378 @@ export default function ServerSelectScreen() {
           renderItem={renderProfile}
           keyExtractor={(item) => item.id}
           style={styles.list}
+          scrollEnabled={false}
         />
       )}
 
       {!showAdd ? (
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)}>
-          <Text style={styles.addBtnText}>+ Add Server</Text>
+        <TouchableOpacity
+          style={styles.addCard}
+          onPress={() => {
+            setShowAdd(true);
+            setError(null);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.addIcon}>+</Text>
+          <Text style={styles.addText}>Add Server</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Server Name"
-            placeholderTextColor="#6B7280"
-            value={name}
-            onChangeText={setName}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="URL (e.g. https://your-server:3000)"
-            placeholderTextColor="#6B7280"
-            value={url}
-            onChangeText={setUrl}
-            autoCapitalize="none"
-            keyboardType="url"
-          />
+          <Text style={styles.formTitle}>New Server</Text>
 
-          <View style={styles.modeRow}>
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={styles.input}
+              placeholder="Server Name"
+              placeholderTextColor="#8E8E93"
+              value={name}
+              onChangeText={setName}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={styles.input}
+              placeholder="URL (e.g. https://your-server:3000)"
+              placeholderTextColor="#8E8E93"
+              value={url}
+              onChangeText={setUrl}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+          </View>
+
+          {/* Segmented control for auth mode */}
+          <View style={styles.segmentedControl}>
             <TouchableOpacity
-              style={[styles.modeBtn, authMode === 'key' && styles.modeBtnActive]}
+              style={[styles.segment, authMode === 'key' && styles.segmentActive]}
               onPress={() => setAuthMode('key')}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.modeBtnText, authMode === 'key' && styles.modeBtnTextActive]}>
+              <Text style={[styles.segmentText, authMode === 'key' && styles.segmentTextActive]}>
                 API Key
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modeBtn, authMode === 'login' && styles.modeBtnActive]}
+              style={[styles.segment, authMode === 'login' && styles.segmentActive]}
               onPress={() => setAuthMode('login')}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.modeBtnText, authMode === 'login' && styles.modeBtnTextActive]}>
+              <Text
+                style={[styles.segmentText, authMode === 'login' && styles.segmentTextActive]}
+              >
                 User Login
               </Text>
             </TouchableOpacity>
           </View>
 
           {authMode === 'login' && (
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#6B7280"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
+            <View style={styles.inputGroup}>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#8E8E93"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
           )}
 
-          <TextInput
-            style={styles.input}
-            placeholder={authMode === 'key' ? 'API Key' : 'Password'}
-            placeholderTextColor="#6B7280"
-            value={credential}
-            onChangeText={setCredential}
-            secureTextEntry
-          />
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={styles.input}
+              placeholder={authMode === 'key' ? 'API Key' : 'Password'}
+              placeholderTextColor="#8E8E93"
+              value={credential}
+              onChangeText={setCredential}
+              secureTextEntry
+            />
+          </View>
 
           <View style={styles.formActions}>
             <TouchableOpacity
               style={styles.cancelBtn}
-              onPress={() => setShowAdd(false)}
+              onPress={() => {
+                setShowAdd(false);
+                setError(null);
+              }}
               disabled={connecting}
+              activeOpacity={0.7}
             >
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.connectBtn} onPress={handleAdd} disabled={connecting}>
-              <Text style={styles.connectBtnText}>
-                {connecting ? 'Connecting...' : 'Connect'}
-              </Text>
+
+            <TouchableOpacity
+              style={styles.connectBtnWrapper}
+              onPress={handleAdd}
+              disabled={connecting}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#4A90FF', '#6366F1']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.connectBtn}
+              >
+                {connecting ? (
+                  <View style={styles.connectingRow}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.connectBtnText}>Connecting...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.connectBtnText}>Connect</Text>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D0D', padding: 24, paddingTop: 80 },
-  title: { color: '#F9FAFB', fontSize: 32, fontWeight: '800', marginBottom: 4 },
-  subtitle: { color: '#6B7280', fontSize: 16, marginBottom: 32 },
-  list: { flexGrow: 0, marginBottom: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: '#1C1C1E',
+  },
+  containerContent: {
+    padding: 24,
+    paddingTop: 80,
+    paddingBottom: 40,
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 36,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  subtitle: {
+    color: '#8E8E93',
+    fontSize: 17,
+    marginBottom: 28,
+  },
+
+  // Error card
+  errorCard: {
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.25)',
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  errorIcon: {
+    fontSize: 18,
+    marginRight: 10,
+    marginTop: 1,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    flex: 1,
+    lineHeight: 20,
+  },
+  errorDismiss: {
+    marginLeft: 8,
+    padding: 10,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorDismissText: {
+    color: '#FF6B6B',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Server list
+  list: {
+    flexGrow: 0,
+    marginBottom: 12,
+  },
+
+  // Server card
   profileCard: {
-    backgroundColor: '#111827',
-    borderRadius: 12,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 16,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#3A3A3C',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  profileName: { color: '#F9FAFB', fontSize: 17, fontWeight: '600', marginBottom: 4 },
-  profileUrl: { color: '#6B7280', fontSize: 13, marginBottom: 4 },
-  profileAuth: { color: '#60A5FA', fontSize: 12 },
-  addBtn: {
-    backgroundColor: '#1F2937',
+  cardLeft: {
+    flex: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  statusDot: {
+    fontSize: 8,
+    marginRight: 8,
+  },
+  profileName: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  profileUrl: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginBottom: 8,
+    marginLeft: 16,
+  },
+  authBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(74, 144, 255, 0.15)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginLeft: 16,
+  },
+  authBadgeText: {
+    color: '#4A90FF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cardRight: {
+    marginLeft: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 24,
+  },
+  chevron: {
+    color: '#8E8E93',
+    fontSize: 28,
+    fontWeight: '300',
+  },
+
+  // Add server card
+  addCard: {
+    backgroundColor: 'transparent',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#3A3A3C',
+    borderStyle: 'dashed',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  addIcon: {
+    color: '#4A90FF',
+    fontSize: 22,
+    fontWeight: '500',
+  },
+  addText: {
+    color: '#4A90FF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Form
+  form: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#3A3A3C',
+    padding: 20,
+    gap: 14,
+  },
+  formTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  inputGroup: {},
+  input: {
+    backgroundColor: '#1C1C1E',
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderStyle: 'dashed',
-  },
-  addBtnText: { color: '#60A5FA', fontSize: 15, fontWeight: '600' },
-  form: { gap: 12 },
-  input: {
-    backgroundColor: '#111827',
-    borderRadius: 10,
-    padding: 14,
-    color: '#F9FAFB',
+    color: '#FFFFFF',
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#3A3A3C',
   },
-  modeRow: { flexDirection: 'row', gap: 10 },
-  modeBtn: {
+
+  // Segmented control
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 12,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#3A3A3C',
+  },
+  segment: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#1F2937',
+    borderRadius: 10,
     alignItems: 'center',
   },
-  modeBtnActive: { backgroundColor: '#2563EB' },
-  modeBtnText: { color: '#9CA3AF', fontSize: 14, fontWeight: '500' },
-  modeBtnTextActive: { color: '#fff' },
-  formActions: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  segmentActive: {
+    backgroundColor: '#4A90FF',
+  },
+  segmentText: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  segmentTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Form actions
+  formActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: '#374151',
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: '#3A3A3C',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  cancelBtnText: { color: '#D1D5DB', fontSize: 15, fontWeight: '600' },
-  connectBtn: {
+  cancelBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  connectBtnWrapper: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
-  connectBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  connectBtn: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  connectBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  connectingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
 });
