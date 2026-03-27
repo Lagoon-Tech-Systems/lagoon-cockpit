@@ -17,6 +17,7 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'Images', description: 'Manage Docker images', icon: '\u{1F4E6}', route: '/manage/images' },
   { label: 'Networks', description: 'Docker network topology', icon: '\u{1F310}', route: '/manage/networks' },
   { label: 'Metrics History', description: 'CPU/RAM/disk trends over time', icon: '\u{1F4C8}', route: '/manage/metrics' },
+  { label: 'Grafana Monitoring', description: 'Live Grafana dashboards', icon: '\u{1F4CA}', route: '/manage/monitoring' },
   { label: 'Alert Rules', description: 'Custom threshold-based alerts', icon: '\u{1F514}', route: '/manage/alert-rules', adminOnly: true },
   { label: 'Webhooks', description: 'Fire events to Slack/Discord/n8n', icon: '\u{1F517}', route: '/manage/webhooks', adminOnly: true },
   { label: 'Activity Log', description: 'Who did what and when', icon: '\u{1F4CB}', route: '/manage/activity' },
@@ -53,7 +54,7 @@ export default function ManageScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Monitoring</Text>
-        {visibleItems.slice(4, 7).map((item) => (
+        {visibleItems.slice(4, 8).map((item) => (
           <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
             <Text style={styles.menuIcon}>{item.icon}</Text>
             <View style={styles.menuContent}>
@@ -68,7 +69,7 @@ export default function ManageScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Operations</Text>
-        {visibleItems.slice(7).map((item) => (
+        {visibleItems.slice(8).map((item) => (
           <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
             <Text style={styles.menuIcon}>{item.icon}</Text>
             <View style={styles.menuContent}>
