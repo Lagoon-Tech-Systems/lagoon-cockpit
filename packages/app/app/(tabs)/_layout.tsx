@@ -1,7 +1,8 @@
-import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSSE } from '../../src/hooks/useSSE';
+import { useNotifications } from '../../src/hooks/useNotifications';
 import { useDashboardStore } from '../../src/stores/dashboardStore';
 import { COLORS } from '../../src/theme/tokens';
 
@@ -49,6 +50,8 @@ const tabIconStyles = StyleSheet.create({
 
 export default function TabLayout() {
   useSSE();
+  useNotifications();
+  const router = useRouter();
   const platform = useDashboardStore((s) => s.platform);
   const isWindows = platform === 'windows';
 
@@ -85,6 +88,16 @@ export default function TabLayout() {
         options={{
           title: 'Overview',
           tabBarIcon: ({ focused }) => <TabIcon label="Overview" focused={focused} />,
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/servers')}
+              style={{ marginRight: 16, padding: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel="All servers"
+            >
+              <Ionicons name="globe-outline" size={22} color={COLORS.blue} />
+            </TouchableOpacity>
+          ),
         }}
       />
       <Tabs.Screen

@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useServerStore } from '../../src/stores/serverStore';
+import { useDashboardStore } from '../../src/stores/dashboardStore';
 import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
 
 interface MenuItem {
@@ -11,28 +13,66 @@ interface MenuItem {
   iconColor: string;
   route: string;
   adminOnly?: boolean;
+  section: 'docker' | 'monitoring' | 'operations';
+  windowsOnly?: boolean;
 }
 
 const MENU_ITEMS: MenuItem[] = [
-  { label: 'System Map', description: 'Visual node-graph of all infrastructure', icon: 'map', iconColor: COLORS.blue, route: '/manage/system-map' },
-  { label: 'Disk Usage', description: 'Storage breakdown + system prune', icon: 'save', iconColor: COLORS.purple, route: '/manage/disk' },
-  { label: 'Images', description: 'Manage Docker images', icon: 'cube', iconColor: COLORS.orange, route: '/manage/images' },
-  { label: 'Networks', description: 'Docker network topology', icon: 'globe', iconColor: COLORS.teal, route: '/manage/networks' },
-  { label: 'Metrics History', description: 'CPU/RAM/disk trends over time', icon: 'stats-chart', iconColor: COLORS.green, route: '/manage/metrics' },
-  { label: 'Alert Rules', description: 'Custom threshold-based alerts', icon: 'notifications', iconColor: COLORS.yellow, route: '/manage/alert-rules', adminOnly: true },
-  { label: 'Webhooks', description: 'Fire events to Slack/Discord/n8n', icon: 'link', iconColor: COLORS.indigo, route: '/manage/webhooks', adminOnly: true },
-  { label: 'Activity Log', description: 'Who did what and when', icon: 'list', iconColor: COLORS.textSecondary, route: '/manage/activity' },
-  { label: 'Scheduled Actions', description: 'Cron-based container automation', icon: 'calendar', iconColor: COLORS.rose, route: '/manage/schedules', adminOnly: true },
-  { label: 'Maintenance Mode', description: 'Pause alerts during planned work', icon: 'build', iconColor: COLORS.yellow, route: '/manage/maintenance', adminOnly: true },
-  { label: 'Server Settings', description: 'Manage server profiles', icon: 'settings', iconColor: COLORS.textSecondary, route: '/settings' },
+  /* Docker Resources */
+  { label: 'System Map', description: 'Visual node-graph of all infrastructure', icon: 'map', iconColor: COLORS.blue, route: '/manage/system-map', section: 'docker' },
+  { label: 'Disk Usage', description: 'Storage breakdown + system prune', icon: 'save', iconColor: COLORS.purple, route: '/manage/disk', section: 'docker' },
+  { label: 'Images', description: 'Manage Docker images', icon: 'cube', iconColor: COLORS.orange, route: '/manage/images', section: 'docker' },
+  { label: 'Networks', description: 'Docker network topology', icon: 'globe', iconColor: COLORS.teal, route: '/manage/networks', section: 'docker' },
+  /* Monitoring */
+  { label: 'Metrics History', description: 'CPU/RAM/disk trends over time', icon: 'stats-chart', iconColor: COLORS.green, route: '/manage/metrics', section: 'monitoring' },
+  { label: 'Alert Rules', description: 'Custom threshold-based alerts', icon: 'notifications', iconColor: COLORS.yellow, route: '/manage/alert-rules', adminOnly: true, section: 'monitoring' },
+  { label: 'Push Notifications', description: 'Manage mobile push alert preferences', icon: 'phone-portrait', iconColor: COLORS.teal, route: '/manage/notifications', section: 'monitoring' },
+  { label: 'Webhooks', description: 'Fire events to Slack/Discord/n8n', icon: 'link', iconColor: COLORS.indigo, route: '/manage/webhooks', adminOnly: true, section: 'monitoring' },
+  /* Operations */
+  { label: 'Event Log', description: 'Windows Event Log viewer', icon: 'document-text', iconColor: COLORS.orange, route: '/manage/eventlog', section: 'operations', windowsOnly: true },
+  { label: 'Activity Log', description: 'Who did what and when', icon: 'list', iconColor: COLORS.textSecondary, route: '/manage/activity', section: 'operations' },
+  { label: 'Scheduled Actions', description: 'Cron-based container automation', icon: 'calendar', iconColor: COLORS.rose, route: '/manage/schedules', adminOnly: true, section: 'operations' },
+  { label: 'Maintenance Mode', description: 'Pause alerts during planned work', icon: 'build', iconColor: COLORS.yellow, route: '/manage/maintenance', adminOnly: true, section: 'operations' },
+  { label: 'Server Settings', description: 'Manage server profiles', icon: 'settings', iconColor: COLORS.textSecondary, route: '/settings', section: 'operations' },
 ];
+
+function renderMenuItem(
+  item: MenuItem,
+  router: ReturnType<typeof useRouter>,
+) {
+  return (
+    <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
+      <View style={[styles.menuIconContainer, { backgroundColor: item.iconColor + '20' }]}>
+        <Ionicons name={item.icon} size={20} color={item.iconColor} />
+      </View>
+      <View style={styles.menuContent}>
+        <Text style={styles.menuLabel}>{item.label}</Text>
+        <Text style={styles.menuDesc}>{item.description}</Text>
+      </View>
+      {item.adminOnly && <Text style={styles.adminBadge}>Admin</Text>}
+      <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
+    </TouchableOpacity>
+  );
+}
 
 export default function ManageScreen() {
   const router = useRouter();
   const userRole = useServerStore((s) => s.userRole);
   const isAdmin = userRole === 'admin';
+  const platform = useDashboardStore((s) => s.platform);
 
-  const visibleItems = MENU_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const { dockerItems, monitoringItems, operationsItems } = useMemo(() => {
+    const visible = MENU_ITEMS.filter((item) => {
+      if (item.adminOnly && !isAdmin) return false;
+      if (item.windowsOnly && platform !== 'windows') return false;
+      return true;
+    });
+    return {
+      dockerItems: visible.filter((i) => i.section === 'docker'),
+      monitoringItems: visible.filter((i) => i.section === 'monitoring'),
+      operationsItems: visible.filter((i) => i.section === 'operations'),
+    };
+  }, [isAdmin, platform]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -41,52 +81,17 @@ export default function ManageScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Docker Resources</Text>
-        {visibleItems.slice(0, 4).map((item) => (
-          <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
-            <View style={[styles.menuIconContainer, { backgroundColor: item.iconColor + '20' }]}>
-              <Ionicons name={item.icon} size={20} color={item.iconColor} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <Text style={styles.menuDesc}>{item.description}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
-          </TouchableOpacity>
-        ))}
+        {dockerItems.map((item) => renderMenuItem(item, router))}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Monitoring</Text>
-        {visibleItems.slice(4, 7).map((item) => (
-          <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
-            <View style={[styles.menuIconContainer, { backgroundColor: item.iconColor + '20' }]}>
-              <Ionicons name={item.icon} size={20} color={item.iconColor} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <Text style={styles.menuDesc}>{item.description}</Text>
-            </View>
-            {item.adminOnly && <Text style={styles.adminBadge}>Admin</Text>}
-            <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
-          </TouchableOpacity>
-        ))}
+        {monitoringItems.map((item) => renderMenuItem(item, router))}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Operations</Text>
-        {visibleItems.slice(7).map((item) => (
-          <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
-            <View style={[styles.menuIconContainer, { backgroundColor: item.iconColor + '20' }]}>
-              <Ionicons name={item.icon} size={20} color={item.iconColor} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <Text style={styles.menuDesc}>{item.description}</Text>
-            </View>
-            {item.adminOnly && <Text style={styles.adminBadge}>Admin</Text>}
-            <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
-          </TouchableOpacity>
-        ))}
+        {operationsItems.map((item) => renderMenuItem(item, router))}
       </View>
     </ScrollView>
   );

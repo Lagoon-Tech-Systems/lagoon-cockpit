@@ -42,7 +42,9 @@ export const useNotificationStore = create<NotificationState>((set) => ({
 
       if (finalStatus !== 'granted') return;
 
-      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: '4254fbcc-5b16-4aab-b308-6c45db806390',
+      });
       const token = tokenData.data;
 
       // Register with server
