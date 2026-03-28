@@ -8,6 +8,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Overview: 'bar-chart-outline',
   Containers: 'cube-outline',
   Stacks: 'layers-outline',
+  Monitoring: 'analytics-outline',
   Alerts: 'notifications-outline',
   Manage: 'settings-outline',
 };
@@ -93,6 +94,13 @@ export default function TabLayout() {
         options={{
           title: 'Stacks',
           tabBarIcon: ({ focused }) => <TabIcon label="Stacks" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="monitoring"
+        options={{
+          title: 'Monitoring',
+          tabBarIcon: ({ focused }) => <TabIcon label="Monitoring" focused={focused} />,
         }}
       />
       <Tabs.Screen

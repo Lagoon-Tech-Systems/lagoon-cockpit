@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,36 +7,51 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { Stack } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import { useServerStore } from '../../src/stores/serverStore';
 import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
 
 /* ---------- Constants ---------- */
 
 const GRAFANA_BASE = 'https://grafana.lagoontechsystems.com';
-const DASHBOARD_UID = 'lagoon-infra';
-const DASHBOARD_SLUG = 'lagoon-infrastructure';
 
-const PANELS = [
+const LINUX_DASHBOARD = { uid: 'lagoon-infra', slug: 'lagoon-infrastructure' };
+const WINDOWS_DASHBOARD = { uid: 'lagoon-windows', slug: 'windows-server' };
+
+const LINUX_PANELS = [
   { label: 'Overview', panelId: null },
   { label: 'CPU', panelId: 2 },
   { label: 'Memory', panelId: 4 },
   { label: 'Containers', panelId: 6 },
 ] as const;
 
-type Panel = (typeof PANELS)[number];
+const WINDOWS_PANELS = [
+  { label: 'Overview', panelId: null },
+  { label: 'CPU', panelId: 2 },
+  { label: 'Memory', panelId: 4 },
+  { label: 'Services', panelId: 10 },
+] as const;
+
+type PanelDef = { label: string; panelId: number | null };
 
 /* ---------- Helpers ---------- */
 
-function buildGrafanaUrl(panel: Panel): string {
-  if (panel.panelId == null) {
-    return `${GRAFANA_BASE}/d/${DASHBOARD_UID}/${DASHBOARD_SLUG}?theme=dark`;
-  }
-  return `${GRAFANA_BASE}/d-solo/${DASHBOARD_UID}/${DASHBOARD_SLUG}?panelId=${panel.panelId}&theme=dark`;
+function isWindowsServer(name: string, url: string): boolean {
+  const combined = (name + ' ' + url).toLowerCase();
+  return combined.includes('win') || combined.includes('windows');
 }
 
-// Auto-login script: hits Grafana login API to set session cookie, then navigates to dashboard
+function buildGrafanaUrl(
+  dashboard: { uid: string; slug: string },
+  panel: PanelDef,
+): string {
+  if (panel.panelId == null) {
+    return `${GRAFANA_BASE}/d/${dashboard.uid}/${dashboard.slug}?theme=dark`;
+  }
+  return `${GRAFANA_BASE}/d-solo/${dashboard.uid}/${dashboard.slug}?panelId=${panel.panelId}&theme=dark`;
+}
+
 const AUTO_LOGIN_JS = `
   (function() {
     if (document.querySelector('form[name="loginForm"], input[name="user"]')) {
@@ -55,15 +70,31 @@ const AUTO_LOGIN_JS = `
 
 /* ---------- Screen ---------- */
 
-export default function MonitoringScreen() {
-  const [activePanel, setActivePanel] = useState<Panel>(PANELS[0]);
+export default function MonitoringTab() {
+  const serverName = useServerStore((s) => s.serverName) ?? '';
+  const activeProfileId = useServerStore((s) => s.activeProfileId);
+  const profiles = useServerStore((s) => s.profiles);
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
+  const serverUrl = activeProfile?.url ?? '';
+
+  const isWindows = useMemo(
+    () => isWindowsServer(serverName, serverUrl),
+    [serverName, serverUrl],
+  );
+
+  const dashboard = isWindows ? WINDOWS_DASHBOARD : LINUX_DASHBOARD;
+  const panels: PanelDef[] = isWindows
+    ? [...WINDOWS_PANELS]
+    : [...LINUX_PANELS];
+
+  const [activePanel, setActivePanel] = useState<PanelDef>(panels[0]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const webviewRef = useRef<WebView>(null);
 
-  const currentUrl = buildGrafanaUrl(activePanel);
+  const currentUrl = buildGrafanaUrl(dashboard, activePanel);
 
-  const handlePanelChange = useCallback((panel: Panel) => {
+  const handlePanelChange = useCallback((panel: PanelDef) => {
     setActivePanel(panel);
     setLoading(true);
     setError(false);
@@ -78,23 +109,61 @@ export default function MonitoringScreen() {
   const handleRetry = useCallback(() => {
     setLoading(true);
     setError(false);
-    // Force re-mount by toggling panel back
     setActivePanel((prev) => ({ ...prev }));
   }, []);
 
+  // No server connected
+  if (!activeProfileId) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.center}>
+          <Ionicons
+            name="analytics-outline"
+            size={48}
+            color={COLORS.textTertiary}
+            style={{ marginBottom: SPACING.lg }}
+          />
+          <Text style={styles.errorTitle}>No Server Connected</Text>
+          <Text style={styles.errorText}>
+            Connect to a server to view its monitoring dashboard.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.screen}>
-      <Stack.Screen
-        options={{
-          title: 'Monitoring',
-          headerStyle: { backgroundColor: COLORS.bg },
-          headerTintColor: COLORS.textPrimary,
-        }}
-      />
+      {/* Server indicator */}
+      <View style={styles.serverBar}>
+        <Ionicons
+          name={isWindows ? 'desktop-outline' : 'server-outline'}
+          size={16}
+          color={isWindows ? COLORS.blue : COLORS.green}
+        />
+        <Text style={styles.serverLabel} numberOfLines={1}>
+          {serverName || activeProfile?.name || 'Server'}
+        </Text>
+        <View
+          style={[
+            styles.platformBadge,
+            { backgroundColor: isWindows ? COLORS.blue + '20' : COLORS.green + '20' },
+          ]}
+        >
+          <Text
+            style={[
+              styles.platformText,
+              { color: isWindows ? COLORS.blue : COLORS.green },
+            ]}
+          >
+            {isWindows ? 'Windows' : 'Linux'}
+          </Text>
+        </View>
+      </View>
 
       {/* Panel Selector */}
       <View style={styles.selectorRow}>
-        {PANELS.map((panel) => {
+        {panels.map((panel) => {
           const isActive = activePanel.label === panel.label;
           return (
             <TouchableOpacity
@@ -113,8 +182,6 @@ export default function MonitoringScreen() {
             </TouchableOpacity>
           );
         })}
-
-        {/* Refresh Button */}
         <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh}>
           <Ionicons name="refresh" size={20} color={COLORS.textSecondary} />
         </TouchableOpacity>
@@ -124,7 +191,12 @@ export default function MonitoringScreen() {
       <View style={styles.webviewContainer}>
         {error ? (
           <View style={styles.center}>
-            <Ionicons name="warning" size={48} color={COLORS.yellow} style={{ marginBottom: SPACING.lg }} />
+            <Ionicons
+              name="warning"
+              size={48}
+              color={COLORS.yellow}
+              style={{ marginBottom: SPACING.lg }}
+            />
             <Text style={styles.errorTitle}>Grafana Unreachable</Text>
             <Text style={styles.errorText}>
               Could not connect to the monitoring dashboard. Check that Grafana
@@ -181,8 +253,9 @@ export default function MonitoringScreen() {
                 originWhitelist={['https://*']}
                 allowsInlineMediaPlayback
                 mixedContentMode="compatibility"
-                // Auto-login to Grafana + viewport fix
-                injectedJavaScript={AUTO_LOGIN_JS + `
+                injectedJavaScript={
+                  AUTO_LOGIN_JS +
+                  `
                   (function() {
                     var meta = document.createElement('meta');
                     meta.name = 'viewport';
@@ -190,7 +263,8 @@ export default function MonitoringScreen() {
                     document.head.appendChild(meta);
                   })();
                   true;
-                `}
+                `
+                }
               />
             )}
           </>
@@ -206,6 +280,30 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.bg,
+  },
+
+  /* Server Bar */
+  serverBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  serverLabel: {
+    flex: 1,
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  platformBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+  },
+  platformText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   /* Panel Selector */
@@ -267,7 +365,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
 
-  /* Error */
+  /* Error / Empty */
   center: {
     flex: 1,
     justifyContent: 'center',
