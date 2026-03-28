@@ -52,21 +52,7 @@ function buildGrafanaUrl(
   return `${GRAFANA_BASE}/d-solo/${dashboard.uid}/${dashboard.slug}?panelId=${panel.panelId}&theme=dark`;
 }
 
-const AUTO_LOGIN_JS = `
-  (function() {
-    if (document.querySelector('form[name="loginForm"], input[name="user"]')) {
-      fetch('${GRAFANA_BASE}/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: 'admin', password: 'lagoon-grafana-2026' }),
-        credentials: 'include'
-      }).then(function() {
-        window.location.reload();
-      });
-    }
-  })();
-  true;
-`;
+/* Grafana anonymous access is enabled (Viewer role) — no login needed */
 
 /* ---------- Screen ---------- */
 
@@ -253,9 +239,7 @@ export default function MonitoringTab() {
                 originWhitelist={['https://*']}
                 allowsInlineMediaPlayback
                 mixedContentMode="compatibility"
-                injectedJavaScript={
-                  AUTO_LOGIN_JS +
-                  `
+                injectedJavaScript={`
                   (function() {
                     var meta = document.createElement('meta');
                     meta.name = 'viewport';
@@ -263,8 +247,7 @@ export default function MonitoringTab() {
                     document.head.appendChild(meta);
                   })();
                   true;
-                `
-                }
+                `}
               />
             )}
           </>
