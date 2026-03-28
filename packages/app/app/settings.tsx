@@ -49,29 +49,7 @@ export default function SettingsScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: 'Settings',
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => {
-                if (router.canGoBack()) {
-                  router.back();
-                } else {
-                  router.replace('/(tabs)/manage');
-                }
-              }}
-              style={{ marginRight: Platform.OS === 'android' ? 16 : 0 }}
-            >
-              <Ionicons
-                name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
-                size={24}
-                color={COLORS.blue}
-              />
-            </TouchableOpacity>
-          ),
-        }}
-      />
+      {/* Header managed by root Stack in _layout.tsx */}
       <View style={styles.container}>
         <Text style={styles.sectionTitle}>Server Profiles</Text>
         <FlatList

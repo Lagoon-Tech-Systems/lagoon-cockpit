@@ -1,4 +1,4 @@
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, AppState, type AppStateStatus, ActivityIndicator } from 'react-native';
 import { useEffect, useRef, useCallback } from 'react';
@@ -63,7 +63,18 @@ export default function RootLayout() {
     <EditionProvider>
       <View style={{ flex: 1, backgroundColor: COLORS.bg }} onLayout={onLayoutReady}>
         <StatusBar style="light" />
-        <Slot />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: COLORS.bg },
+            animation: 'slide_from_right',
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: COLORS.textPrimary, headerTitleStyle: { fontFamily: 'Inter_700Bold' } }} />
+          <Stack.Screen name="servers" options={{ headerShown: true, title: 'All Servers', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: COLORS.textPrimary, headerTitleStyle: { fontFamily: 'Inter_700Bold' } }} />
+        </Stack>
       </View>
     </EditionProvider>
   );
