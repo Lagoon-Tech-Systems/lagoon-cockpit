@@ -2,6 +2,11 @@ require("dotenv").config();
 const express = require("express");
 const { init: initDb, auditLog } = require("./db/sqlite");
 const db = initDb();
+
+// Initialize JWT with SQLite (must happen before routes that use auth)
+const { initJwt } = require("./auth/jwt");
+initJwt(db);
+
 const { init: initUsers, createUser } = require("./auth/users");
 const containers = require("./docker/containers");
 const { getSystemMetrics } = require("./system/metrics");
@@ -11,12 +16,32 @@ const webhooks = require("./system/webhooks");
 const scheduler = require("./system/scheduler");
 const { broadcast, getClientCount, closeAllClients } = require("./stream/sse");
 const { init: initPush, sendPushNotification } = require("./push/expo");
+
+// Security module
+const {
+  securityHeaders,
+  globalLimiter,
+  strictCors,
+  enhancedAudit,
+  requestId,
+  forceHttps,
+} = require("./security");
+
+// Edition system
+const { loadLicense } = require("./edition/license");
+const { loadExtensions } = require("./extensions");
+
+// Integration system
+const { initIntegrations } = require("./integrations");
+
+// Routes
 const authRoutes = require("./routes/auth");
 const containerRoutes = require("./routes/containers");
 const stackRoutes = require("./routes/stacks");
 const systemRoutes = require("./routes/system");
 const manageRoutes = require("./routes/manage");
 const dockerRoutes = require("./routes/docker");
+const integrationRoutes = require("./routes/integrations");
 
 const AUTH_MODE = process.env.AUTH_MODE || "key";
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -38,32 +63,74 @@ alertEngine.init(db, sendPushNotification);
 webhooks.init(db);
 scheduler.init(db, auditLog);
 
+// Load edition from license key (defaults to CE)
+const edition = loadLicense();
+
+// Initialize integration system (adapters, store, scheduler)
+initIntegrations(db, broadcast);
+console.log(`[COCKPIT] Edition: ${edition.name} | Features: ${edition.features?.length || "CE defaults"}`);
+
 const app = express();
+
+// ── Security middleware chain (order matters) ──────────────
+app.set("trust proxy", 1); // Trust first proxy (nginx/traefik)
+app.use(forceHttps());
+app.use(requestId());
+app.use(securityHeaders());
+app.use(strictCors(ALLOWED_ORIGINS));
+app.use(globalLimiter);
 app.use(express.json({ limit: "16kb" }));
+app.use(enhancedAudit(auditLog));
+
+// Store edition in app.locals for middleware access
+app.locals.edition = edition;
 app.locals.maintenanceMode = false;
 
-app.use((req, _res, next) => { console.log(`[REQ] ${req.method} ${req.url} from ${req.ip}`); next(); });
-app.get("/", (_req, res) => { res.json({ service: "lagoon-cockpit-api", status: "ok", docs: "/health" }); });
-app.use((_req, res, next) => { res.header("X-Content-Type-Options", "nosniff"); res.header("X-Frame-Options", "DENY"); next(); });
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (ALLOWED_ORIGINS.length > 0 && origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin); res.header("Vary", "Origin");
-  } else if (ALLOWED_ORIGINS.length === 0) { res.header("Access-Control-Allow-Origin", "*"); }
-  res.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  if (req.method === "OPTIONS") return res.sendStatus(204);
+// ── Request logging ────────────────────────────────────────
+app.use((req, _res, next) => {
+  if (req.path !== "/health" && req.path !== "/") {
+    console.log(`[REQ] ${req.method} ${req.path} from ${req.ip} [${req.requestId}]`);
+  }
   next();
 });
-app.get("/health", (_req, res) => { res.json({ status: "ok", timestamp: new Date().toISOString() }); });
 
+// ── Health & info ──────────────────────────────────────────
+app.get("/", (_req, res) => {
+  res.json({ service: "lagoon-cockpit-api", status: "ok", edition: edition.name, docs: "/health" });
+});
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// ── Edition info endpoint ──────────────────────────────────
+const { requireAuth } = require("./auth/middleware");
+app.get("/api/edition", requireAuth, (_req, res) => {
+  res.json({
+    edition: edition.name,
+    features: edition.features || [],
+    limits: edition.limits || {},
+    org: edition.org || null,
+    expiresAt: edition.exp ? new Date(edition.exp * 1000).toISOString() : null,
+    graceMode: edition.graceMode || false,
+    extensions: (app.locals.extensions || []).map((e) => e.name),
+  });
+});
+
+// ── Routes ────────────────────────────────────────────────
 app.use(authRoutes);
 app.use(containerRoutes);
 app.use(stackRoutes);
 app.use(systemRoutes);
 app.use(manageRoutes);
 app.use(dockerRoutes);
+app.use(integrationRoutes);
 
+// ── Extension loader (Pro/Enterprise modules) ──────────────
+const services = { broadcast, sendPushNotification, auditLog, alertEngine, metricsHistory, webhooks };
+const extensions = loadExtensions(app, db, services);
+app.locals.extensions = extensions;
+
+// ── SSE broadcast loop ─────────────────────────────────────
 let previousContainerStates = {};
 async function broadcastLoop() {
   try {
@@ -112,7 +179,7 @@ async function broadcastLoop() {
 const broadcastInterval = setInterval(broadcastLoop, 15000);
 
 const server = app.listen(PORT, () => {
-  console.log(`[COCKPIT] API on :${PORT} | ${SERVER_NAME} | auth=${AUTH_MODE} | SSE=15s`);
+  console.log(`[COCKPIT] API on :${PORT} | ${SERVER_NAME} | auth=${AUTH_MODE} | edition=${edition.name} | SSE=15s`);
 });
 
 // Graceful shutdown — close SSE clients, stop broadcast, checkpoint SQLite WAL

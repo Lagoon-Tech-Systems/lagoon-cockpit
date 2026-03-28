@@ -6,6 +6,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../src/stores/authStore';
 import LockScreen from '../src/components/LockScreen';
+import { EditionProvider } from '../src/edition/EditionProvider';
 import { COLORS } from '../src/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -59,9 +60,11 @@ export default function RootLayout() {
   if (!isUnlocked) return <LockScreen />;
 
   return (
-    <View style={{ flex: 1, backgroundColor: COLORS.bg }} onLayout={onLayoutReady}>
-      <StatusBar style="light" />
-      <Slot />
-    </View>
+    <EditionProvider>
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }} onLayout={onLayoutReady}>
+        <StatusBar style="light" />
+        <Slot />
+      </View>
+    </EditionProvider>
   );
 }

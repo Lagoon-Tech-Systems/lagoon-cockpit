@@ -43,9 +43,15 @@ try:
 
         def main(self):
             # Change to the agent directory
-            agent_dir = os.path.dirname(os.path.abspath(__file__))
+            # NOTE: __file__ may resolve to pythonservice.exe's directory
+            # when running as a Windows Service, so we use the known install path.
+            agent_dir = r"C:\lagoon\cockpit-agent"
             os.chdir(agent_dir)
             sys.path.insert(0, agent_dir)
+
+            # Load .env BEFORE any imports that depend on config
+            from dotenv import load_dotenv
+            load_dotenv(os.path.join(agent_dir, ".env"), override=True)
 
             # Import and start the agent
             import threading

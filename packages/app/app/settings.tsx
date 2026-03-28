@@ -2,11 +2,14 @@ import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert, Platform } f
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
+import { useEdition } from '../src/edition/useEdition';
+import { EDITION_LABELS } from '../src/edition/features';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW } from '../src/theme/tokens';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { profiles, activeProfileId, removeProfile, disconnect } = useServerStore();
+  const { edition, org, graceMode, isLoaded: editionLoaded } = useEdition();
 
   const handleDisconnect = () => {
     disconnect();
@@ -77,6 +80,36 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/')}>
           <Text style={styles.addText}>+ Add Server</Text>
         </TouchableOpacity>
+
+        {editionLoaded && (
+          <>
+            <Text style={styles.sectionTitle}>License</Text>
+            <View style={styles.card}>
+              <View style={styles.cardContent}>
+                <Text style={styles.cardName}>
+                  {EDITION_LABELS[edition] || edition} Edition
+                </Text>
+                {org && <Text style={styles.cardUrl}>{org}</Text>}
+                {graceMode && (
+                  <Text style={[styles.cardAuth, { color: COLORS.yellow }]}>
+                    License expired — grace period active
+                  </Text>
+                )}
+                {!graceMode && edition !== 'ce' && (
+                  <Text style={styles.cardAuth}>License active</Text>
+                )}
+                {edition === 'ce' && (
+                  <Text style={styles.cardAuth}>Free — upgrade for more features</Text>
+                )}
+              </View>
+              <Ionicons
+                name={edition === 'ce' ? 'shield-outline' : 'shield-checkmark'}
+                size={24}
+                color={edition === 'ce' ? COLORS.textTertiary : COLORS.green}
+              />
+            </View>
+          </>
+        )}
 
         <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
           <Text style={styles.disconnectText}>Disconnect</Text>

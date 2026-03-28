@@ -1,0 +1,43 @@
+const EDITION = process.env.COCKPIT_EDITION || "production";
+
+module.exports = {
+  expo: {
+    name: EDITION === "ce" ? "Lagoon Cockpit CE" : "Lagoon Cockpit",
+    slug: "lagoon-cockpit",
+    version: "1.0.0",
+    orientation: "portrait",
+    scheme: "lagoon-cockpit",
+    userInterfaceStyle: "dark",
+    ios: {
+      bundleIdentifier: "com.lagoontechsystems.cockpit",
+      supportsTablet: true,
+    },
+    android: {
+      package: "com.lagoontechsystems.cockpit",
+      adaptiveIcon: {
+        backgroundColor: "#0D0D0D",
+      },
+      usesCleartextTraffic: true,
+      permissions: [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+      ],
+    },
+    plugins: [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      ["expo-notifications", { color: "#0D0D0D" }],
+      ["expo-build-properties", { android: { usesCleartextTraffic: true } }],
+      "expo-font",
+    ],
+    extra: {
+      edition: EDITION,
+      router: {},
+      eas: {
+        projectId: "4254fbcc-5b16-4aab-b308-6c45db806390",
+      },
+    },
+    owner: "bigabou007-dev",
+  },
+};

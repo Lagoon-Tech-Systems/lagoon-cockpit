@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useServerStore } from '../../src/stores/serverStore';
 import { useDashboardStore } from '../../src/stores/dashboardStore';
+import { useEdition } from '../../src/edition/useEdition';
+import { UpgradePrompt } from '../../src/edition/UpgradePrompt';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW } from '../../src/theme/tokens';
 
 interface MenuItem {
@@ -15,6 +17,8 @@ interface MenuItem {
   adminOnly?: boolean;
   section: 'docker' | 'monitoring' | 'operations';
   windowsOnly?: boolean;
+  /** Feature key for edition gating — if set and not available, shows lock badge */
+  feature?: string;
 }
 
 const MENU_ITEMS: MenuItem[] = [
@@ -28,6 +32,7 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'Alert Rules', description: 'Custom threshold-based alerts', icon: 'notifications', iconColor: COLORS.yellow, route: '/manage/alert-rules', adminOnly: true, section: 'monitoring' },
   { label: 'Push Notifications', description: 'Manage mobile push alert preferences', icon: 'phone-portrait', iconColor: COLORS.teal, route: '/manage/notifications', section: 'monitoring' },
   { label: 'Webhooks', description: 'Fire events to Slack/Discord/n8n', icon: 'link', iconColor: COLORS.indigo, route: '/manage/webhooks', adminOnly: true, section: 'monitoring' },
+  { label: 'Integrations', description: 'Connect external monitoring sources', icon: 'git-network', iconColor: COLORS.indigo, route: '/manage/integrations', adminOnly: true, section: 'monitoring', feature: 'integrations_basic' },
   /* Operations */
   { label: 'Event Log', description: 'Windows Event Log viewer', icon: 'document-text', iconColor: COLORS.orange, route: '/manage/eventlog', section: 'operations', windowsOnly: true },
   { label: 'Activity Log', description: 'Who did what and when', icon: 'list', iconColor: COLORS.textSecondary, route: '/manage/activity', section: 'operations' },
@@ -39,17 +44,29 @@ const MENU_ITEMS: MenuItem[] = [
 function renderMenuItem(
   item: MenuItem,
   router: ReturnType<typeof useRouter>,
+  hasFeature: (f: string) => boolean,
 ) {
+  const isLocked = item.feature ? !hasFeature(item.feature) : false;
+
   return (
-    <TouchableOpacity key={item.route} style={styles.menuItem} onPress={() => router.push(item.route as any)}>
-      <View style={[styles.menuIconContainer, { backgroundColor: item.iconColor + '20' }]}>
-        <Ionicons name={item.icon} size={20} color={item.iconColor} />
+    <TouchableOpacity
+      key={item.route}
+      style={[styles.menuItem, isLocked && styles.menuItemLocked]}
+      onPress={() => {
+        if (isLocked) return; // UpgradePrompt shown inline via lock badge
+        router.push(item.route as any);
+      }}
+      activeOpacity={isLocked ? 1 : 0.7}
+    >
+      <View style={[styles.menuIconContainer, { backgroundColor: item.iconColor + (isLocked ? '10' : '20') }]}>
+        <Ionicons name={isLocked ? 'lock-closed' : item.icon} size={20} color={isLocked ? COLORS.textTertiary : item.iconColor} />
       </View>
       <View style={styles.menuContent}>
-        <Text style={styles.menuLabel}>{item.label}</Text>
+        <Text style={[styles.menuLabel, isLocked && styles.menuLabelLocked]}>{item.label}</Text>
         <Text style={styles.menuDesc}>{item.description}</Text>
       </View>
-      {item.adminOnly && <Text style={styles.adminBadge}>Admin</Text>}
+      {isLocked && <UpgradePrompt feature={item.feature!} compact />}
+      {item.adminOnly && !isLocked && <Text style={styles.adminBadge}>Admin</Text>}
       <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
     </TouchableOpacity>
   );
@@ -60,6 +77,7 @@ export default function ManageScreen() {
   const userRole = useServerStore((s) => s.userRole);
   const isAdmin = userRole === 'admin';
   const platform = useDashboardStore((s) => s.platform);
+  const { hasFeature } = useEdition();
 
   const { dockerItems, monitoringItems, operationsItems } = useMemo(() => {
     const visible = MENU_ITEMS.filter((item) => {
@@ -81,17 +99,17 @@ export default function ManageScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Docker Resources</Text>
-        {dockerItems.map((item) => renderMenuItem(item, router))}
+        {dockerItems.map((item) => renderMenuItem(item, router, hasFeature))}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Monitoring</Text>
-        {monitoringItems.map((item) => renderMenuItem(item, router))}
+        {monitoringItems.map((item) => renderMenuItem(item, router, hasFeature))}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Operations</Text>
-        {operationsItems.map((item) => renderMenuItem(item, router))}
+        {operationsItems.map((item) => renderMenuItem(item, router, hasFeature))}
       </View>
     </ScrollView>
   );
@@ -118,7 +136,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   menuContent: { flex: 1 },
+  menuItemLocked: { opacity: 0.6 },
   menuLabel: { color: COLORS.textPrimary, ...FONT.heading, fontSize: 16 },
+  menuLabelLocked: { color: COLORS.textTertiary },
   menuDesc: { color: COLORS.textTertiary, fontSize: 12, marginTop: 2 },
   adminBadge: {
     color: COLORS.yellow, fontSize: 10, fontWeight: '700', backgroundColor: '#422006',
