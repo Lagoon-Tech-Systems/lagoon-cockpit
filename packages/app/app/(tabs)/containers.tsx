@@ -1,7 +1,7 @@
-import { View, TextInput, FlatList, RefreshControl, StyleSheet, Alert, ScrollView, Animated, Easing } from 'react-native';
+import { View, TextInput, FlatList, RefreshControl, StyleSheet, Alert, ScrollView, Animated, Easing, ActivityIndicator } from 'react-native';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { useDashboardStore, type ContainerSummary } from '../../src/stores/dashboardStore';
+import { useDashboardStore, type ContainerSummary, type WindowsService } from '../../src/stores/dashboardStore';
 import { apiFetch } from '../../src/lib/api';
 import ContainerCard from '../../src/components/ContainerCard';
 import Skeleton from '../../src/components/Skeleton';
@@ -11,6 +11,7 @@ import { COLORS } from '../../src/theme/tokens';
 import * as Haptics from 'expo-haptics';
 
 type Filter = 'all' | 'running' | 'stopped' | 'unhealthy';
+type WinFilter = 'all' | 'running' | 'stopped';
 
 const FILTER_COLORS: Record<Filter, string> = {
   all: COLORS.blue,
@@ -19,7 +20,328 @@ const FILTER_COLORS: Record<Filter, string> = {
   unhealthy: COLORS.yellow,
 };
 
+const WIN_FILTER_COLORS: Record<WinFilter, string> = {
+  all: COLORS.blue,
+  running: COLORS.green,
+  stopped: COLORS.red,
+};
+
+const SERVICE_STATUS_COLOR: Record<string, string> = {
+  Running: COLORS.green,
+  Stopped: COLORS.red,
+  StartPending: COLORS.yellow,
+  StopPending: COLORS.yellow,
+  Paused: COLORS.yellow,
+  ContinuePending: COLORS.yellow,
+  PausePending: COLORS.yellow,
+};
+
+function getServiceStatusColor(status: string): string {
+  return SERVICE_STATUS_COLOR[status] ?? COLORS.textTertiary;
+}
+
+/* ──────────────────────────────────────────────
+   Windows Services sub-component
+   ────────────────────────────────────────────── */
+
+function WindowsServicesView() {
+  const platform = useDashboardStore((s) => s.platform);
+  const services = useDashboardStore((s) => s.services);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<WinFilter>('all');
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const fadeAnims = useRef<Animated.Value[]>([]).current;
+
+  const fetchServices = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await apiFetch<{ services: WindowsService[] }>('/api/services');
+      useDashboardStore.getState().setServices(data.services);
+      setIsLoaded(true);
+    } catch (err) {
+      console.error('Failed to fetch services:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load services');
+    }
+  }, []);
+
+  useEffect(() => { fetchServices(); }, [fetchServices]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchServices();
+    setRefreshing(false);
+  }, [fetchServices]);
+
+  const filtered = services.filter((s) => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (!s.displayName.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q)) return false;
+    }
+    if (filter === 'running') return s.status === 'Running';
+    if (filter === 'stopped') return s.status === 'Stopped';
+    return true;
+  });
+
+  const handleServiceAction = async (name: string, action: 'start' | 'stop' | 'restart') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const label = action.charAt(0).toUpperCase() + action.slice(1);
+    Alert.alert(
+      `${label} service?`,
+      `This will ${action} "${name}".`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: label,
+          style: action === 'stop' ? 'destructive' : 'default',
+          onPress: async () => {
+            setActionLoading(name);
+            try {
+              await apiFetch(`/api/services/${name}/${action}`, { method: 'POST' });
+              await fetchServices();
+            } catch (err) {
+              Alert.alert('Failed', err instanceof Error ? err.message : 'Action failed');
+            } finally {
+              setActionLoading(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const runningCount = services.filter(s => s.status === 'Running').length;
+  const stoppedCount = services.filter(s => s.status === 'Stopped').length;
+
+  const filters: { key: WinFilter; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: services.length },
+    { key: 'running', label: 'Running', count: runningCount },
+    { key: 'stopped', label: 'Stopped', count: stoppedCount },
+  ];
+
+  return (
+    <View style={styles.container}>
+      {/* Summary bar */}
+      <View style={styles.summaryBar}>
+        <Text style={styles.summaryText}>
+          {services.length} services
+          <Text style={{ color: COLORS.green }}> {'\u2022'} {runningCount} running</Text>
+          {stoppedCount > 0 && <Text style={{ color: COLORS.red }}> {'\u2022'} {stoppedCount} stopped</Text>}
+        </Text>
+      </View>
+
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={16} color={COLORS.textTertiary} style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.search}
+          placeholder="Search services..."
+          placeholderTextColor={COLORS.textTertiary}
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+
+      {/* Filter pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
+        {filters.map((f) => {
+          const isActive = filter === f.key;
+          const pillColor = WIN_FILTER_COLORS[f.key];
+          return (
+            <TouchableOpacity
+              key={f.key}
+              style={[
+                styles.filterPill,
+                isActive && { backgroundColor: pillColor + '26', borderColor: pillColor },
+              ]}
+              onPress={() => setFilter(f.key)}
+            >
+              <Text style={[
+                styles.filterText,
+                isActive && { color: pillColor },
+              ]}>
+                {f.label}
+              </Text>
+              <View style={[
+                styles.filterCount,
+                isActive && { backgroundColor: pillColor + '33' },
+              ]}>
+                <Text style={[
+                  styles.filterCountText,
+                  isActive && { color: pillColor },
+                ]}>
+                  {f.count}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Error state */}
+      {error && !isLoaded && services.length === 0 && (
+        <View style={styles.errorCard}>
+          <Ionicons name="cloud-offline-outline" size={32} color={COLORS.red} />
+          <Text style={styles.errorTitle}>Connection Error</Text>
+          <Text style={styles.errorMessage}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={fetchServices}>
+            <Ionicons name="refresh" size={16} color={COLORS.blue} />
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Skeleton loading state */}
+      {!isLoaded && !error && services.length === 0 && (
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.skeletonCard}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                <View>
+                  <Skeleton width={140} height={16} borderRadius={4} />
+                  <Skeleton width={200} height={12} borderRadius={4} style={{ marginTop: 6 }} />
+                </View>
+                <Skeleton width={70} height={24} borderRadius={12} />
+              </View>
+              <Skeleton width={'100%'} height={4} borderRadius={2} />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+                <Skeleton width={60} height={12} borderRadius={4} />
+                <Skeleton width={80} height={12} borderRadius={4} />
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Service list */}
+      {(isLoaded || services.length > 0) && (
+        <FlatList
+          data={filtered}
+          renderItem={({ item, index }) => {
+            while (fadeAnims.length <= index) {
+              fadeAnims.push(new Animated.Value(0));
+            }
+            const fadeAnim = fadeAnims[index];
+            if ((fadeAnim as any).__getValue() === 0) {
+              Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 400,
+                delay: index * 60,
+                easing: Easing.out(Easing.ease),
+                useNativeDriver: true,
+              }).start();
+            }
+            const statusColor = getServiceStatusColor(item.status);
+            const isActioning = actionLoading === item.name;
+            return (
+              <Animated.View style={{ opacity: fadeAnim }}>
+                <View style={[styles.serviceCard, { borderLeftColor: statusColor }]}>
+                  {/* Header row */}
+                  <View style={styles.serviceHeader}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={styles.serviceName} numberOfLines={1}>{item.displayName}</Text>
+                        {item.protected && (
+                          <View style={styles.protectedBadge}>
+                            <Ionicons name="shield-checkmark" size={10} color={COLORS.orange} />
+                            <Text style={styles.protectedText}>protected</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.serviceSubName} numberOfLines={1}>{item.name}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '26' }]}>
+                      <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                      <Text style={[styles.statusText, { color: statusColor }]}>{item.status}</Text>
+                    </View>
+                  </View>
+
+                  {/* Info row */}
+                  <View style={styles.serviceInfo}>
+                    <View style={styles.serviceInfoItem}>
+                      <Ionicons name="settings-outline" size={12} color={COLORS.textTertiary} />
+                      <Text style={styles.serviceInfoText}>{item.startType}</Text>
+                    </View>
+                    {item.pid > 0 && (
+                      <View style={styles.serviceInfoItem}>
+                        <Ionicons name="code-slash-outline" size={12} color={COLORS.textTertiary} />
+                        <Text style={styles.serviceInfoText}>PID {item.pid}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Action buttons */}
+                  <View style={styles.serviceActions}>
+                    {isActioning ? (
+                      <ActivityIndicator size="small" color={COLORS.blue} />
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: COLORS.green + '1A' }]}
+                          onPress={() => handleServiceAction(item.name, 'start')}
+                          disabled={item.status === 'Running'}
+                        >
+                          <Ionicons name="play" size={14} color={item.status === 'Running' ? COLORS.textTertiary : COLORS.green} />
+                          <Text style={[styles.actionBtnText, { color: item.status === 'Running' ? COLORS.textTertiary : COLORS.green }]}>Start</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: COLORS.red + '1A' }]}
+                          onPress={() => handleServiceAction(item.name, 'stop')}
+                          disabled={item.status === 'Stopped'}
+                        >
+                          <Ionicons name="stop" size={14} color={item.status === 'Stopped' ? COLORS.textTertiary : COLORS.red} />
+                          <Text style={[styles.actionBtnText, { color: item.status === 'Stopped' ? COLORS.textTertiary : COLORS.red }]}>Stop</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: COLORS.blue + '1A' }]}
+                          onPress={() => handleServiceAction(item.name, 'restart')}
+                          disabled={item.status === 'Stopped'}
+                        >
+                          <Ionicons name="refresh-circle" size={14} color={item.status === 'Stopped' ? COLORS.textTertiary : COLORS.blue} />
+                          <Text style={[styles.actionBtnText, { color: item.status === 'Stopped' ? COLORS.textTertiary : COLORS.blue }]}>Restart</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </View>
+              </Animated.View>
+            );
+          }}
+          keyExtractor={(item) => item.name}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.blue} colors={['#4A90FF']} progressBackgroundColor="#2C2C2E" />
+          }
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={<Text style={styles.empty}>No services found</Text>}
+        />
+      )}
+    </View>
+  );
+}
+
+/* ──────────────────────────────────────────────
+   Main screen — delegates to Windows or Linux
+   ────────────────────────────────────────────── */
+
 export default function ContainersScreen() {
+  const platform = useDashboardStore((s) => s.platform);
+
+  // ── Windows: render services view ──
+  if (platform === 'windows') {
+    return <WindowsServicesView />;
+  }
+
+  // ── Linux: original containers view (unchanged) ──
+  return <LinuxContainersView />;
+}
+
+/* ──────────────────────────────────────────────
+   Linux Containers view (original behaviour)
+   ────────────────────────────────────────────── */
+
+function LinuxContainersView() {
   const router = useRouter();
   const { containers, setContainers } = useDashboardStore();
   const [refreshing, setRefreshing] = useState(false);
@@ -481,6 +803,98 @@ const styles = StyleSheet.create({
   },
   bulkBtnText: {
     fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // ── Windows service card styles ──
+  serviceCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 4,
+  },
+  serviceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  serviceName: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  serviceSubName: {
+    color: COLORS.textTertiary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  protectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.orange + '1A',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3,
+  },
+  protectedText: {
+    color: COLORS.orange,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 5,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  serviceInfo: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+  },
+  serviceInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  serviceInfoText: {
+    color: COLORS.textTertiary,
+    fontSize: 12,
+  },
+  serviceActions: {
+    flexDirection: 'row',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 10,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+  },
+  actionBtnText: {
+    fontSize: 12,
     fontWeight: '600',
   },
 });

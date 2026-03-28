@@ -1,5 +1,6 @@
-import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert, Platform } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
 import { COLORS, RADIUS, SPACING } from '../src/theme/tokens';
 
@@ -41,7 +42,29 @@ export default function SettingsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Settings', headerBackTitle: 'Back' }} />
+      <Stack.Screen
+        options={{
+          title: 'Settings',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/(tabs)/manage');
+                }
+              }}
+              style={{ marginRight: Platform.OS === 'android' ? 16 : 0 }}
+            >
+              <Ionicons
+                name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
+                size={24}
+                color={COLORS.blue}
+              />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <View style={styles.container}>
         <Text style={styles.sectionTitle}>Server Profiles</Text>
         <FlatList

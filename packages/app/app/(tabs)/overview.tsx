@@ -228,6 +228,7 @@ export default function OverviewScreen() {
   const router = useRouter();
   const { serverName, disconnect } = useServerStore();
   const { overview, setOverview, containers, setContainers, stacks, setStacks, alerts } = useDashboardStore();
+  const platform = useDashboardStore((s) => s.platform);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -235,14 +236,26 @@ export default function OverviewScreen() {
   const fetchAll = useCallback(async () => {
     try {
       setError(null);
-      const [overviewData, containerData, stackData] = await Promise.all([
-        apiFetch<any>('/api/overview'),
-        apiFetch<any>('/api/containers'),
-        apiFetch<any>('/api/stacks'),
-      ]);
+
+      // Always fetch overview first to determine platform
+      const overviewData = await apiFetch<any>('/api/overview');
       setOverview(overviewData);
-      setContainers(containerData.containers);
-      setStacks(stackData.stacks);
+
+      const detectedPlatform = overviewData.platform === 'windows' ? 'windows' : 'linux';
+
+      if (detectedPlatform === 'windows') {
+        // Windows: fetch services instead of containers/stacks
+        const servicesData = await apiFetch<any>('/api/services');
+        useDashboardStore.getState().setServices(servicesData.services);
+      } else {
+        // Linux: fetch containers and stacks as usual
+        const [containerData, stackData] = await Promise.all([
+          apiFetch<any>('/api/containers'),
+          apiFetch<any>('/api/stacks'),
+        ]);
+        setContainers(containerData.containers);
+        setStacks(stackData.stacks);
+      }
     } catch (err) {
       console.error('[COCKPIT] Failed to fetch overview:', err);
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
@@ -332,7 +345,49 @@ export default function OverviewScreen() {
       )}
 
       {/* ── 2. Quick Stat Cards (2x2) ── */}
-      {overview && (
+      {overview && platform === 'windows' && (
+        <FadeSlideIn delay={0}>
+          <View style={styles.statGrid}>
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: T.blue + '20' }]}>
+                <Ionicons name="cog-outline" size={16} color={T.blue} />
+              </View>
+              <Text style={styles.statNumber}>
+                {overview.services?.total ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>SERVICES</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: T.green + '20' }]}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={T.green} />
+              </View>
+              <Text style={styles.statNumber}>{overview.services?.running ?? 0}</Text>
+              <Text style={styles.statLabel}>RUNNING</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: T.red + '20' }]}>
+                <Ionicons name="stop-circle-outline" size={16} color={T.red} />
+              </View>
+              <Text style={[styles.statNumber, (overview.services?.stopped ?? 0) > 0 && { color: T.red }]}>
+                {overview.services?.stopped ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>STOPPED</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: T.purple + '20' }]}>
+                <Ionicons name="list-outline" size={16} color={T.purple} />
+              </View>
+              <Text style={styles.statNumber}>-</Text>
+              <Text style={styles.statLabel}>PROCESSES</Text>
+            </View>
+          </View>
+        </FadeSlideIn>
+      )}
+
+      {overview && platform !== 'windows' && (
         <FadeSlideIn delay={0}>
           <View style={styles.statGrid}>
             <TouchableOpacity
@@ -425,8 +480,8 @@ export default function OverviewScreen() {
         </FadeSlideIn>
       )}
 
-      {/* ── 4. Load Average ── */}
-      {sys && (
+      {/* ── 4. Load Average (Linux only — Windows has no load average) ── */}
+      {sys && sys.load && platform !== 'windows' && (
         <View style={styles.loadCard}>
           <Text style={styles.loadTitle}>LOAD AVG</Text>
           <View style={styles.loadValues}>
@@ -439,8 +494,8 @@ export default function OverviewScreen() {
         </View>
       )}
 
-      {/* ── 5. Problem Containers ── */}
-      {problemContainers.length > 0 && (
+      {/* ── 5. Problem Containers (Linux only) ── */}
+      {platform !== 'windows' && problemContainers.length > 0 && (
         <FadeSlideIn delay={200}>
           <View style={styles.section}>
             <Text style={[styles.sectionHeader, { color: T.red }]}>ATTENTION REQUIRED</Text>

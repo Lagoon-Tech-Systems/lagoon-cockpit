@@ -33,6 +33,24 @@ export interface StackSummary {
   containers: ContainerSummary[];
 }
 
+export interface WindowsService {
+  name: string;
+  displayName: string;
+  status: string;
+  pid: number;
+  startType: string;
+  protected: boolean;
+}
+
+export interface WindowsProcess {
+  pid: number;
+  name: string;
+  cpuPercent: number;
+  memoryMB: number;
+  status: string;
+  user: string;
+}
+
 export interface Alert {
   type: string;
   containerId?: string;
@@ -45,24 +63,32 @@ export interface Alert {
 
 interface OverviewData {
   serverName: string;
+  platform?: 'linux' | 'windows';
   system: SystemMetrics;
   containers: { total: number; running: number; stopped: number; unhealthy: number };
   stacks: { total: number; allHealthy: boolean };
+  services?: { total: number; running: number; stopped: number };
   timestamp: string;
 }
 
 interface DashboardState {
   overview: OverviewData | null;
+  platform: 'linux' | 'windows';
   containers: ContainerSummary[];
   stacks: StackSummary[];
+  services: WindowsService[];
+  processes: WindowsProcess[];
   alerts: Alert[];
   isLoading: boolean;
   error: string | null;
   lastUpdated: string | null;
 
   setOverview: (data: OverviewData) => void;
+  setPlatform: (platform: 'linux' | 'windows') => void;
   setContainers: (data: ContainerSummary[]) => void;
   setStacks: (data: StackSummary[]) => void;
+  setServices: (data: WindowsService[]) => void;
+  setProcesses: (data: WindowsProcess[]) => void;
   addAlert: (alert: Alert) => void;
   updateFromSSE: (event: string, data: unknown) => void;
   setLoading: (loading: boolean) => void;
@@ -72,16 +98,25 @@ interface DashboardState {
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   overview: null,
+  platform: 'linux',
   containers: [],
   stacks: [],
+  services: [],
+  processes: [],
   alerts: [],
   isLoading: false,
   error: null,
   lastUpdated: null,
 
-  setOverview: (data) => set({ overview: data, lastUpdated: new Date().toISOString() }),
+  setOverview: (data) => {
+    const platform = data.platform === 'windows' ? 'windows' : 'linux';
+    set({ overview: data, platform, lastUpdated: new Date().toISOString() });
+  },
+  setPlatform: (platform) => set({ platform }),
   setContainers: (data) => set({ containers: data }),
   setStacks: (data) => set({ stacks: data }),
+  setServices: (data) => set({ services: data }),
+  setProcesses: (data) => set({ processes: data }),
 
   addAlert: (alert) =>
     set((state) => ({

@@ -8,10 +8,11 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -159,7 +160,15 @@ export default function ServerSelectScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.containerContent}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.title}>Lagoon Cockpit</Text>
       <Text style={styles.subtitle}>Your servers</Text>
 
@@ -310,6 +319,7 @@ export default function ServerSelectScreen() {
         </View>
       )}
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -321,7 +331,7 @@ const styles = StyleSheet.create({
   containerContent: {
     padding: 24,
     paddingTop: 80,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   title: {
     color: COLORS.textPrimary,

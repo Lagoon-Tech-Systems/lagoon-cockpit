@@ -2,12 +2,15 @@ import { Tabs } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSSE } from '../../src/hooks/useSSE';
+import { useDashboardStore } from '../../src/stores/dashboardStore';
 import { COLORS } from '../../src/theme/tokens';
 
 const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Overview: 'bar-chart-outline',
   Containers: 'cube-outline',
+  Services: 'cog-outline',
   Stacks: 'layers-outline',
+  Processes: 'list-outline',
   Monitoring: 'analytics-outline',
   Alerts: 'notifications-outline',
   Manage: 'settings-outline',
@@ -46,6 +49,8 @@ const tabIconStyles = StyleSheet.create({
 
 export default function TabLayout() {
   useSSE();
+  const platform = useDashboardStore((s) => s.platform);
+  const isWindows = platform === 'windows';
 
   return (
     <Tabs
@@ -85,15 +90,19 @@ export default function TabLayout() {
       <Tabs.Screen
         name="containers"
         options={{
-          title: 'Containers',
-          tabBarIcon: ({ focused }) => <TabIcon label="Containers" focused={focused} />,
+          title: isWindows ? 'Services' : 'Containers',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label={isWindows ? 'Services' : 'Containers'} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="stacks"
         options={{
-          title: 'Stacks',
-          tabBarIcon: ({ focused }) => <TabIcon label="Stacks" focused={focused} />,
+          title: isWindows ? 'Processes' : 'Stacks',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label={isWindows ? 'Processes' : 'Stacks'} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
