@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { URLSearchParams } = require("url");
 const { BaseAdapter, createMetric, createAlert } = require("../adapter");
 const { safeFetch } = require("../../security/url-validator");
 
@@ -140,10 +141,6 @@ class CloudWatchAdapter extends BaseAdapter {
     const canonicalUri = "/";
     const canonicalQuerystring = this._sortQueryString(queryParams);
 
-    const headers = {
-      host: host,
-      "x-amz-date": amzDate,
-    };
     const signedHeaders = "host;x-amz-date";
     const canonicalHeaders = `host:${host}\nx-amz-date:${amzDate}\n`;
 

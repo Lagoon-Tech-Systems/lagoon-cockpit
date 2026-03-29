@@ -200,7 +200,7 @@ function stripCteWrappers(sql) {
     // Extract the parenthesized CTE body by counting depth
     if (sql[pos] !== "(") break;
     let depth = 1;
-    let bodyStart = pos + 1;
+    const bodyStart = pos + 1;
     pos++;
     while (pos < sql.length && depth > 0) {
       if (sql[pos] === "(") depth++;
