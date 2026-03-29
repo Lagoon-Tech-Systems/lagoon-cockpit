@@ -90,10 +90,9 @@ router.get("/auth/users", requireAuth, requireRole("admin"), (_req, res) => {
   res.json({ users: listUsers() });
 });
 
-router.post("/auth/users", requireAuth, requireRole("admin"), (req, res) => {
+router.post("/auth/users", requireAuth, requireRole("admin"), validateBody("createUser"), (req, res) => {
   try {
     const { email, password, role } = req.body;
-    if (!email || !password) return res.status(400).json({ error: "email and password required" });
     const user = createUser(email, password, role);
     auditLog(req.user.id, "user.create", email, `Role: ${role || "viewer"}`);
     res.status(201).json(user);

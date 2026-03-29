@@ -35,7 +35,7 @@ function createUser(email, password, role = "viewer") {
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (existing) throw new Error("User already exists");
 
-  const hash = bcrypt.hashSync(password, 10);
+  const hash = bcrypt.hashSync(password, 12);
   const result = db.prepare("INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)").run(email, hash, role);
 
   return { id: result.lastInsertRowid, email, role };
