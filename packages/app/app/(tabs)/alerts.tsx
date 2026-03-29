@@ -1,5 +1,6 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
-import { useRef, useEffect } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { useEffect } from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withDelay, withTiming, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useDashboardStore, type Alert } from '../../src/stores/dashboardStore';
 import Skeleton from '../../src/components/Skeleton';
@@ -36,31 +37,21 @@ function SkeletonAlerts() {
 
 /* Animated wrapper for staggered entry */
 function FadeSlideIn({ delay, children }: { delay: number; children: React.ReactNode }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(16)).current;
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(16);
 
   useEffect(() => {
-    const anim = Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 400,
-        delay,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 400,
-        delay,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]);
-    anim.start();
-  }, [opacity, translateY, delay]);
+    opacity.value = withDelay(delay, withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }));
+    translateY.value = withDelay(delay, withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+    <Animated.View style={animStyle}>
       {children}
     </Animated.View>
   );

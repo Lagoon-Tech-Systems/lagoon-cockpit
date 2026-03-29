@@ -1,6 +1,7 @@
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { useAuthStore } from '../stores/authStore';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/tokens';
@@ -9,7 +10,7 @@ export default function LockScreen() {
   const { unlock, isLoading, checkBiometricSupport, bypassUnlock } = useAuthStore();
   const [hasBiometrics, setHasBiometrics] = useState(true);
   const [error, setError] = useState('');
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useSharedValue(1);
 
   useEffect(() => {
     checkBiometricSupport().then((supported) => {
@@ -24,23 +25,18 @@ export default function LockScreen() {
 
   // Pulse animation on the icon while waiting
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.15,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ]),
+    pulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(1.15, { duration: 1000 }),
+        withTiming(1, { duration: 1000 }),
+      ),
+      -1,
     );
-    pulse.start();
-    return () => pulse.stop();
   }, []);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseAnim.value }],
+  }));
 
   const handleUnlock = async () => {
     setError('');
@@ -51,7 +47,7 @@ export default function LockScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Animated.View style={[styles.iconContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <Animated.View style={[styles.iconContainer, pulseStyle]}>
           <View style={styles.iconCircle}>
             <Ionicons name="shield-checkmark-outline" size={48} color={COLORS.blue} />
           </View>

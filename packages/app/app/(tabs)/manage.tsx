@@ -38,6 +38,18 @@ const MENU_ITEMS: MenuItem[] = [
   /* Pro Features */
   { label: 'Incidents', description: 'Declare and manage incidents', icon: 'warning', iconColor: COLORS.red, route: '/manage/incidents', section: 'monitoring', feature: 'incidents' },
   { label: 'Auto-Remediation', description: 'Self-healing rules and history', icon: 'flash', iconColor: COLORS.orange, route: '/manage/remediation', section: 'monitoring', feature: 'remediation' },
+  { label: 'Status Pages', description: 'Public status pages for services', icon: 'globe-outline', iconColor: COLORS.green, route: '/manage/status-pages', section: 'monitoring', feature: 'status_pages' },
+  { label: 'Uptime Monitors', description: 'HTTP, TCP & DNS probe monitoring', icon: 'pulse', iconColor: COLORS.teal, route: '/manage/uptime', section: 'monitoring', feature: 'uptime_monitoring' },
+  { label: 'ChatOps', description: 'Telegram & Slack alert channels', icon: 'chatbubbles', iconColor: COLORS.indigo, route: '/manage/chatops', section: 'monitoring', feature: 'chatops' },
+  { label: 'SLA Tracking', description: 'Error budgets and compliance', icon: 'shield-checkmark', iconColor: COLORS.purple, route: '/manage/sla', section: 'monitoring', feature: 'sla' },
+  /* Enterprise Features */
+  { label: 'SSO / SAML', description: 'Single sign-on providers', icon: 'key', iconColor: COLORS.red, route: '/manage/sso', section: 'monitoring', feature: 'sso_saml' },
+  { label: 'Branding', description: 'White-label theme settings', icon: 'color-palette', iconColor: COLORS.pink, route: '/manage/branding', section: 'monitoring', feature: 'white_label' },
+  { label: 'Custom Roles', description: 'Role-based access control', icon: 'people', iconColor: COLORS.orange, route: '/manage/roles', section: 'monitoring', feature: 'custom_roles' },
+  { label: 'IP Allowlist', description: 'Network access rules', icon: 'shield', iconColor: COLORS.green, route: '/manage/ip-allowlist', section: 'monitoring', feature: 'ip_allowlist' },
+  { label: 'mTLS', description: 'Mutual TLS certificates', icon: 'lock-closed', iconColor: COLORS.teal, route: '/manage/mtls', section: 'monitoring', feature: 'mtls' },
+  { label: 'Encryption', description: 'Data encryption at rest', icon: 'key', iconColor: COLORS.indigo, route: '/manage/encryption', section: 'monitoring', feature: 'encryption_at_rest' },
+  { label: 'Compliance Logs', description: 'Audit trail and compliance', icon: 'document-text', iconColor: COLORS.purple, route: '/manage/compliance', section: 'monitoring', feature: 'compliance_logging' },
   /* Operations */
   { label: 'Event Log', description: 'Windows Event Log viewer', icon: 'document-text', iconColor: COLORS.orange, route: '/manage/eventlog', section: 'operations', windowsOnly: true },
   { label: 'Activity Log', description: 'Who did what and when', icon: 'list', iconColor: COLORS.textSecondary, route: '/manage/activity', section: 'operations' },
