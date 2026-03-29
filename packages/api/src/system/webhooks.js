@@ -27,7 +27,11 @@ const BLOCKED_HOSTS = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.25
 
 function validateWebhookUrl(url) {
   let parsed;
-  try { parsed = new URL(url); } catch { throw new Error("Invalid URL"); }
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Invalid URL");
+  }
   if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("URL must be http or https");
   if (BLOCKED_HOSTS.test(parsed.hostname)) throw new Error("URL cannot target private/internal addresses");
   return parsed;
@@ -39,20 +43,23 @@ function createWebhook(name, url, events = "container.down", headers = {}) {
   validateWebhookUrl(url);
   const count = db.prepare("SELECT COUNT(*) as c FROM webhooks").get().c;
   if (count >= 50) throw new Error("Maximum 50 webhooks allowed");
-  const result = db.prepare(
-    "INSERT INTO webhooks (name, url, events, headers) VALUES (?, ?, ?, ?)"
-  ).run(name, url, events, JSON.stringify(headers));
+  const result = db
+    .prepare("INSERT INTO webhooks (name, url, events, headers) VALUES (?, ?, ?, ?)")
+    .run(name, url, events, JSON.stringify(headers));
   return { id: result.lastInsertRowid, name, url, events };
 }
 
 /** List all webhooks */
 function listWebhooks() {
   if (!db) return [];
-  return db.prepare("SELECT * FROM webhooks ORDER BY created_at DESC").all().map((w) => ({
-    ...w,
-    headers: JSON.parse(w.headers || "{}"),
-    events: w.events.split(",").map((e) => e.trim()),
-  }));
+  return db
+    .prepare("SELECT * FROM webhooks ORDER BY created_at DESC")
+    .all()
+    .map((w) => ({
+      ...w,
+      headers: JSON.parse(w.headers || "{}"),
+      events: w.events.split(",").map((e) => e.trim()),
+    }));
 }
 
 /** Delete a webhook */
@@ -84,16 +91,25 @@ async function fireWebhooks(event, payload) {
       const url = new URL(hook.url);
 
       await new Promise((resolve, reject) => {
-        const req = client.request({
-          hostname: url.hostname,
-          port: url.port,
-          path: url.pathname + url.search,
-          method: "POST",
-          headers,
-          timeout: 10000,
-        }, (res) => { res.resume(); res.on("end", resolve); });
+        const req = client.request(
+          {
+            hostname: url.hostname,
+            port: url.port,
+            path: url.pathname + url.search,
+            method: "POST",
+            headers,
+            timeout: 10000,
+          },
+          (res) => {
+            res.resume();
+            res.on("end", resolve);
+          },
+        );
         req.on("error", reject);
-        req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+        req.on("timeout", () => {
+          req.destroy();
+          reject(new Error("timeout"));
+        });
         req.write(body);
         req.end();
       });

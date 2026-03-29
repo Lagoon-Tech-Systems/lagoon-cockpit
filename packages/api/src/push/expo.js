@@ -24,7 +24,7 @@ function registerToken(token, userId, serverName) {
      ON CONFLICT(token) DO UPDATE SET
        user_id = excluded.user_id,
        server_name = excluded.server_name,
-       updated_at = datetime('now')`
+       updated_at = datetime('now')`,
   ).run(token, userId, serverName);
 }
 

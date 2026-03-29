@@ -20,11 +20,7 @@ async function listContainers(all = true, includeSize = false) {
       type: p.Type,
       ip: p.IP,
     })),
-    health: c.Status?.includes("healthy")
-      ? "healthy"
-      : c.Status?.includes("unhealthy")
-        ? "unhealthy"
-        : null,
+    health: c.Status?.includes("healthy") ? "healthy" : c.Status?.includes("unhealthy") ? "unhealthy" : null,
     labels: c.Labels || {},
     composeProject: c.Labels?.["com.docker.compose.project"] || null,
     composeService: c.Labels?.["com.docker.compose.service"] || null,
@@ -47,14 +43,10 @@ async function getContainerStats(id) {
   });
 
   // Calculate CPU %
-  const cpuDelta =
-    raw.cpu_stats.cpu_usage.total_usage -
-    raw.precpu_stats.cpu_usage.total_usage;
-  const systemDelta =
-    raw.cpu_stats.system_cpu_usage - raw.precpu_stats.system_cpu_usage;
+  const cpuDelta = raw.cpu_stats.cpu_usage.total_usage - raw.precpu_stats.cpu_usage.total_usage;
+  const systemDelta = raw.cpu_stats.system_cpu_usage - raw.precpu_stats.system_cpu_usage;
   const cpuCount = raw.cpu_stats.online_cpus || 1;
-  const cpuPercent =
-    systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+  const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
 
   // Memory
   const memUsage = raw.memory_stats.usage || 0;
@@ -108,7 +100,10 @@ async function getContainerLogs(id, { tail = 100, since, stdout = true, stderr =
         if (offset + 8 > buf.length) break;
         const size = buf.readUInt32BE(offset + 4);
         if (offset + 8 + size > buf.length) break;
-        const line = buf.subarray(offset + 8, offset + 8 + size).toString("utf8").trimEnd();
+        const line = buf
+          .subarray(offset + 8, offset + 8 + size)
+          .toString("utf8")
+          .trimEnd();
         if (line) lines.push(line);
         offset += 8 + size;
       }

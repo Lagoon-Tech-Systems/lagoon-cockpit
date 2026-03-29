@@ -4,7 +4,13 @@ const router = express.Router();
 const { authenticateWithKey } = require("../auth/keys");
 const { authenticateWithCredentials, createUser, listUsers, deleteUser, updateUserRole } = require("../auth/users");
 const { signAccessToken, generateRefreshToken, validateRefreshToken } = require("../auth/jwt");
-const { requireAuth, requireRole, rateLimitAuth, recordFailedAttempt, clearFailedAttempts } = require("../auth/middleware");
+const {
+  requireAuth,
+  requireRole,
+  rateLimitAuth,
+  recordFailedAttempt,
+  clearFailedAttempts,
+} = require("../auth/middleware");
 const { auditLog } = require("../db/sqlite");
 const { validateBody } = require("../security/request-validator");
 const { requestFingerprint } = require("../security/crypto");

@@ -22,43 +22,54 @@ function init(database) {
   `);
 
   // Cleanup old entries (keep 7 days)
-  setInterval(() => {
-    if (db) db.prepare("DELETE FROM metrics_history WHERE created_at < datetime('now', '-7 days')").run();
-  }, 60 * 60 * 1000); // Every hour
+  setInterval(
+    () => {
+      if (db) db.prepare("DELETE FROM metrics_history WHERE created_at < datetime('now', '-7 days')").run();
+    },
+    60 * 60 * 1000,
+  ); // Every hour
 }
 
 /** Record a metrics snapshot */
 function recordMetrics(metrics, containerStats) {
   if (!db) return;
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO metrics_history (cpu_percent, memory_percent, disk_percent, load_1, container_total, container_running)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
+  `,
+  ).run(
     metrics.cpuPercent,
     metrics.memory.percent,
     metrics.disk.percent,
     metrics.load.load1,
     containerStats.total,
-    containerStats.running
+    containerStats.running,
   );
 }
 
 /** Get historical metrics for the last N hours */
 function getHistory(hours = 24) {
   if (!db) return [];
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT cpu_percent, memory_percent, disk_percent, load_1,
            container_total, container_running, created_at
     FROM metrics_history
     WHERE created_at > datetime('now', '-' || ? || ' hours')
     ORDER BY created_at ASC
-  `).all(hours);
+  `,
+    )
+    .all(hours);
 }
 
 /** Get a summary with min/max/avg for each metric */
 function getHistorySummary(hours = 24) {
   if (!db) return null;
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT
       COUNT(*) as data_points,
       ROUND(AVG(cpu_percent), 2) as cpu_avg,
@@ -72,7 +83,9 @@ function getHistorySummary(hours = 24) {
       ROUND(MAX(load_1), 2) as load_max
     FROM metrics_history
     WHERE created_at > datetime('now', '-' || ? || ' hours')
-  `).get(hours);
+  `,
+    )
+    .get(hours);
 }
 
 module.exports = { init, recordMetrics, getHistory, getHistorySummary };

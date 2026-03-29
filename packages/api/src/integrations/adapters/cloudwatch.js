@@ -64,8 +64,8 @@ class CloudWatchAdapter extends BaseAdapter {
               alarm.name,
               alarm.stateValue === "ALARM" ? "critical" : "info",
               this._mapAlarmState(alarm.stateValue),
-              null
-            )
+              null,
+            ),
           );
         }
       }
@@ -102,16 +102,7 @@ class CloudWatchAdapter extends BaseAdapter {
           const text = await res.text();
           const value = this._parseMetricValue(text);
           if (value !== null) {
-            points.push(
-              createMetric(
-                this.name,
-                "",
-                mq.metricName,
-                value,
-                mq.unit,
-                { namespace: mq.namespace }
-              )
-            );
+            points.push(createMetric(this.name, "", mq.metricName, value, mq.unit, { namespace: mq.namespace }));
           }
         }
       } catch {
@@ -135,7 +126,10 @@ class CloudWatchAdapter extends BaseAdapter {
 
     const now = new Date();
     const dateStamp = now.toISOString().replace(/[-:]/g, "").slice(0, 8);
-    const amzDate = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const amzDate = now
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}/, "");
 
     const method = "GET";
     const canonicalUri = "/";
@@ -163,16 +157,8 @@ class CloudWatchAdapter extends BaseAdapter {
       crypto.createHash("sha256").update(canonicalRequest).digest("hex"),
     ].join("\n");
 
-    const signingKey = this._getSignatureKey(
-      this.config.secret_access_key,
-      dateStamp,
-      region,
-      service
-    );
-    const signature = crypto
-      .createHmac("sha256", signingKey)
-      .update(stringToSign)
-      .digest("hex");
+    const signingKey = this._getSignatureKey(this.config.secret_access_key, dateStamp, region, service);
+    const signature = crypto.createHmac("sha256", signingKey).update(stringToSign).digest("hex");
 
     const authorizationHeader =
       `AWS4-HMAC-SHA256 Credential=${this.config.access_key_id}/${credentialScope}, ` +
@@ -205,9 +191,7 @@ class CloudWatchAdapter extends BaseAdapter {
    */
   _sortQueryString(params) {
     const sorted = [...params.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    return sorted
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join("&");
+    return sorted.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
   }
 
   /**

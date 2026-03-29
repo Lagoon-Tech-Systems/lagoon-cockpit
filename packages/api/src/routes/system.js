@@ -63,10 +63,7 @@ router.get("/api/system/metrics", requireAuth, (_req, res) => {
 // ── Docker Info + Disk Usage ─────────────────────────────
 router.get("/api/system/docker", requireAuth, async (_req, res) => {
   try {
-    const [info, df] = await Promise.all([
-      dockerSystem.getDockerInfo(),
-      dockerSystem.getDockerDiskUsage(),
-    ]);
+    const [info, df] = await Promise.all([dockerSystem.getDockerInfo(), dockerSystem.getDockerDiskUsage()]);
     res.json({ info, diskUsage: df });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });

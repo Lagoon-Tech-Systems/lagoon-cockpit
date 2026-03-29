@@ -43,7 +43,7 @@ class PagerDutyAdapter extends BaseAdapter {
     try {
       const res = await safeFetch(
         `${this._baseUrl()}/incidents?statuses[]=triggered&statuses[]=acknowledged&limit=25`,
-        { headers: this._headers(), signal: AbortSignal.timeout(15000) }
+        { headers: this._headers(), signal: AbortSignal.timeout(15000) },
       );
 
       if (res.ok) {
@@ -57,8 +57,8 @@ class PagerDutyAdapter extends BaseAdapter {
               inc.title || inc.summary || "PagerDuty Incident",
               this._mapUrgency(inc.urgency),
               this._mapStatus(inc.status),
-              inc.html_url || null
-            )
+              inc.html_url || null,
+            ),
           );
         }
       }
@@ -72,7 +72,7 @@ class PagerDutyAdapter extends BaseAdapter {
     try {
       const res = await safeFetch(
         `${this._baseUrl()}/incidents?statuses[]=resolved&since=${encodeURIComponent(twentyFourHoursAgo)}&limit=25`,
-        { headers: this._headers(), signal: AbortSignal.timeout(15000) }
+        { headers: this._headers(), signal: AbortSignal.timeout(15000) },
       );
 
       if (res.ok) {
@@ -90,8 +90,8 @@ class PagerDutyAdapter extends BaseAdapter {
                 service: inc.service?.summary,
                 resolved_at: inc.last_status_change_at,
                 urgency: inc.urgency,
-              })
-            )
+              }),
+            ),
           );
         }
       }
@@ -101,75 +101,38 @@ class PagerDutyAdapter extends BaseAdapter {
 
     // Pull incident analytics → metrics
     try {
-      const res = await safeFetch(
-        `${this._baseUrl()}/analytics/metrics/incidents/all`,
-        {
-          method: "POST",
-          headers: this._headers(),
-          body: JSON.stringify({
-            filters: {
-              created_at_start: twentyFourHoursAgo,
-              created_at_end: new Date().toISOString(),
-            },
-          }),
-          signal: AbortSignal.timeout(15000),
-        }
-      );
+      const res = await safeFetch(`${this._baseUrl()}/analytics/metrics/incidents/all`, {
+        method: "POST",
+        headers: this._headers(),
+        body: JSON.stringify({
+          filters: {
+            created_at_start: twentyFourHoursAgo,
+            created_at_end: new Date().toISOString(),
+          },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
 
       if (res.ok) {
         const body = await res.json();
         const data = body.data || {};
 
         if (data.mean_seconds_to_resolve !== undefined) {
-          points.push(
-            createMetric(
-              this.name,
-              "",
-              "mean_time_to_resolve",
-              data.mean_seconds_to_resolve,
-              "seconds",
-              {}
-            )
-          );
+          points.push(createMetric(this.name, "", "mean_time_to_resolve", data.mean_seconds_to_resolve, "seconds", {}));
         }
 
         if (data.total_incident_count !== undefined) {
-          points.push(
-            createMetric(
-              this.name,
-              "",
-              "total_incidents_24h",
-              data.total_incident_count,
-              "count",
-              {}
-            )
-          );
+          points.push(createMetric(this.name, "", "total_incidents_24h", data.total_incident_count, "count", {}));
         }
 
         if (data.mean_seconds_to_first_ack !== undefined) {
           points.push(
-            createMetric(
-              this.name,
-              "",
-              "mean_time_to_acknowledge",
-              data.mean_seconds_to_first_ack,
-              "seconds",
-              {}
-            )
+            createMetric(this.name, "", "mean_time_to_acknowledge", data.mean_seconds_to_first_ack, "seconds", {}),
           );
         }
 
         if (data.total_interruptions !== undefined) {
-          points.push(
-            createMetric(
-              this.name,
-              "",
-              "total_interruptions_24h",
-              data.total_interruptions,
-              "count",
-              {}
-            )
-          );
+          points.push(createMetric(this.name, "", "total_interruptions_24h", data.total_interruptions, "count", {}));
         }
       }
     } catch {

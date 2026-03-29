@@ -57,7 +57,8 @@ router.get("/api/containers/:id/logs/search", requireAuth, validateContainerId, 
     let pattern = null;
     if (regex === "true") {
       if (q.length > 200) return res.status(400).json({ error: "Regex pattern too long (max 200 chars)" });
-      if (/(\(.+[+*]\)[+*]|\(.+\|.+\)[+*]|\(.+\)\{\d+,?\d*\}[+*]?|\(.+[+*]\)\{\d+,?\d*\}|\\1)/.test(q)) return res.status(400).json({ error: "Potentially unsafe regex pattern" });
+      if (/(\(.+[+*]\)[+*]|\(.+\|.+\)[+*]|\(.+\)\{\d+,?\d*\}[+*]?|\(.+[+*]\)\{\d+,?\d*\}|\\1)/.test(q))
+        return res.status(400).json({ error: "Potentially unsafe regex pattern" });
       try {
         pattern = new RegExp(q, "i");
       } catch {
@@ -85,37 +86,57 @@ router.get("/api/containers/:id/logs/search", requireAuth, validateContainerId, 
 });
 
 // ── Container Actions ────────────────────────────────────
-router.post("/api/containers/:id/start", requireAuth, requireRole("admin", "operator"), validateContainerId, async (req, res) => {
-  try {
-    await containers.startContainer(req.params.id);
-    auditLog(req.user.id, "container.start", req.params.id);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(err.statusCode === 304 ? 304 : 500).json({ error: safeError(err) });
-  }
-});
+router.post(
+  "/api/containers/:id/start",
+  requireAuth,
+  requireRole("admin", "operator"),
+  validateContainerId,
+  async (req, res) => {
+    try {
+      await containers.startContainer(req.params.id);
+      auditLog(req.user.id, "container.start", req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(err.statusCode === 304 ? 304 : 500).json({ error: safeError(err) });
+    }
+  },
+);
 
-router.post("/api/containers/:id/stop", requireAuth, requireRole("admin", "operator"), validateContainerId, blockSelfAction, async (req, res) => {
-  try {
-    const timeout = parseInt(req.query.t || "10", 10);
-    await containers.stopContainer(req.params.id, timeout);
-    auditLog(req.user.id, "container.stop", req.params.id);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(err.statusCode === 304 ? 304 : 500).json({ error: safeError(err) });
-  }
-});
+router.post(
+  "/api/containers/:id/stop",
+  requireAuth,
+  requireRole("admin", "operator"),
+  validateContainerId,
+  blockSelfAction,
+  async (req, res) => {
+    try {
+      const timeout = parseInt(req.query.t || "10", 10);
+      await containers.stopContainer(req.params.id, timeout);
+      auditLog(req.user.id, "container.stop", req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(err.statusCode === 304 ? 304 : 500).json({ error: safeError(err) });
+    }
+  },
+);
 
-router.post("/api/containers/:id/restart", requireAuth, requireRole("admin", "operator"), validateContainerId, blockSelfAction, async (req, res) => {
-  try {
-    const timeout = parseInt(req.query.t || "10", 10);
-    await containers.restartContainer(req.params.id, timeout);
-    auditLog(req.user.id, "container.restart", req.params.id);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: safeError(err) });
-  }
-});
+router.post(
+  "/api/containers/:id/restart",
+  requireAuth,
+  requireRole("admin", "operator"),
+  validateContainerId,
+  blockSelfAction,
+  async (req, res) => {
+    try {
+      const timeout = parseInt(req.query.t || "10", 10);
+      await containers.restartContainer(req.params.id, timeout);
+      auditLog(req.user.id, "container.restart", req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: safeError(err) });
+    }
+  },
+);
 
 // ── Container Exec ───────────────────────────────────────
 router.post("/api/containers/:id/exec", requireAuth, requireRole("admin"), validateContainerId, async (req, res) => {
@@ -148,19 +169,19 @@ router.post("/api/containers/bulk", requireAuth, requireRole("admin", "operator"
   try {
     const { ids, action } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
-    if (!["start", "stop", "restart"].includes(action)) return res.status(400).json({ error: "action must be start, stop, or restart" });
+    if (!["start", "stop", "restart"].includes(action))
+      return res.status(400).json({ error: "action must be start, stop, or restart" });
     if (ids.length > 20) return res.status(400).json({ error: "Max 20 containers per bulk operation" });
 
     // Validate all IDs
     const CONTAINER_ID_RE_LOCAL = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
     for (const id of ids) {
       if (!CONTAINER_ID_RE_LOCAL.test(id)) return res.status(400).json({ error: `Invalid container ID: ${id}` });
-      if (id === SELF_HOSTNAME) return res.status(403).json({ error: "Cannot perform this action on the Cockpit API container" });
+      if (id === SELF_HOSTNAME)
+        return res.status(403).json({ error: "Cannot perform this action on the Cockpit API container" });
     }
 
-    const results = await Promise.allSettled(
-      ids.map((id) => containers[`${action}Container`](id))
-    );
+    const results = await Promise.allSettled(ids.map((id) => containers[`${action}Container`](id)));
 
     const summary = ids.map((id, i) => ({
       id,
@@ -176,30 +197,40 @@ router.post("/api/containers/bulk", requireAuth, requireRole("admin", "operator"
 });
 
 // ── Nuke & Rebuild ───────────────────────────────────────
-router.post("/api/containers/:id/rebuild", requireAuth, requireRole("admin"), validateContainerId, blockSelfAction, async (req, res) => {
-  try {
-    const info = await containers.inspectContainer(req.params.id);
-    const imageName = info.Config.Image;
-    const name = info.Name.replace(/^\//, "");
+router.post(
+  "/api/containers/:id/rebuild",
+  requireAuth,
+  requireRole("admin"),
+  validateContainerId,
+  blockSelfAction,
+  async (req, res) => {
+    try {
+      const info = await containers.inspectContainer(req.params.id);
+      const imageName = info.Config.Image;
+      const name = info.Name.replace(/^\//, "");
 
-    // Stop container
-    await containers.stopContainer(req.params.id, 10).catch(() => {});
+      // Stop container
+      await containers.stopContainer(req.params.id, 10).catch(() => {});
 
-    // Remove container
-    const { dockerAPI } = require("../docker/client");
-    await dockerAPI("DELETE", `/containers/${req.params.id}`, null, { query: { force: "true" } });
+      // Remove container
+      const { dockerAPI } = require("../docker/client");
+      await dockerAPI("DELETE", `/containers/${req.params.id}`, null, { query: { force: "true" } });
 
-    // Pull latest image
-    await dockerAPI("POST", "/images/create", null, {
-      query: { fromImage: imageName.split(":")[0], tag: imageName.split(":")[1] || "latest" },
-      timeout: 120000,
-    });
+      // Pull latest image
+      await dockerAPI("POST", "/images/create", null, {
+        query: { fromImage: imageName.split(":")[0], tag: imageName.split(":")[1] || "latest" },
+        timeout: 120000,
+      });
 
-    auditLog(req.user.id, "container.rebuild", req.params.id, `Image: ${imageName}`);
-    res.json({ ok: true, message: `Container ${name} removed and image ${imageName} pulled. Recreate via docker-compose up -d.` });
-  } catch (err) {
-    res.status(500).json({ error: safeError(err, "Rebuild failed") });
-  }
-});
+      auditLog(req.user.id, "container.rebuild", req.params.id, `Image: ${imageName}`);
+      res.json({
+        ok: true,
+        message: `Container ${name} removed and image ${imageName} pulled. Recreate via docker-compose up -d.`,
+      });
+    } catch (err) {
+      res.status(500).json({ error: safeError(err, "Rebuild failed") });
+    }
+  },
+);
 
 module.exports = router;

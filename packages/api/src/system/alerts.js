@@ -46,9 +46,9 @@ function createRule(name, metric, operator, threshold, durationSeconds = 0) {
   const count = db.prepare("SELECT COUNT(*) as c FROM alert_rules").get().c;
   if (count >= 100) throw new Error("Maximum 100 alert rules allowed");
 
-  const result = db.prepare(
-    "INSERT INTO alert_rules (name, metric, operator, threshold, duration_seconds) VALUES (?, ?, ?, ?, ?)"
-  ).run(name, metric, operator, threshold, durationSeconds);
+  const result = db
+    .prepare("INSERT INTO alert_rules (name, metric, operator, threshold, duration_seconds) VALUES (?, ?, ?, ?, ?)")
+    .run(name, metric, operator, threshold, durationSeconds);
 
   return { id: result.lastInsertRowid, name, metric, operator, threshold, durationSeconds };
 }
@@ -76,9 +76,7 @@ function toggleRule(id, enabled) {
 /** Get alert event history */
 function getAlertEvents(limit = 50) {
   if (!db) return [];
-  return db.prepare(
-    "SELECT * FROM alert_events ORDER BY created_at DESC LIMIT ?"
-  ).all(Math.min(limit, 500));
+  return db.prepare("SELECT * FROM alert_events ORDER BY created_at DESC LIMIT ?").all(Math.min(limit, 500));
 }
 
 /** Evaluate all rules against current metrics */
@@ -114,11 +112,11 @@ function evaluateRules(metrics, containerStats) {
 
       // Check if duration threshold is met and cooldown has passed (15 min)
       const COOLDOWN_MS = 15 * 60 * 1000;
-      if (elapsed >= rule.duration_seconds && (now - state.notifiedAt) >= COOLDOWN_MS) {
+      if (elapsed >= rule.duration_seconds && now - state.notifiedAt >= COOLDOWN_MS) {
         const message = `${rule.name}: ${rule.metric} is ${value} (threshold: ${rule.operator} ${rule.threshold})`;
 
         db.prepare(
-          "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message) VALUES (?, ?, ?, ?, ?, ?)"
+          "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message) VALUES (?, ?, ?, ?, ?, ?)",
         ).run(rule.id, rule.name, rule.metric, value, rule.threshold, message);
 
         state.notifiedAt = now;
@@ -136,12 +134,18 @@ function evaluateRules(metrics, containerStats) {
 
 function compare(value, operator, threshold) {
   switch (operator) {
-    case ">": return value > threshold;
-    case "<": return value < threshold;
-    case ">=": return value >= threshold;
-    case "<=": return value <= threshold;
-    case "==": return value === threshold;
-    default: return false;
+    case ">":
+      return value > threshold;
+    case "<":
+      return value < threshold;
+    case ">=":
+      return value >= threshold;
+    case "<=":
+      return value <= threshold;
+    case "==":
+      return value === threshold;
+    default:
+      return false;
   }
 }
 

@@ -69,7 +69,10 @@ async function execInContainer(containerId, command) {
           break;
         }
         const size = buf.readUInt32BE(offset + 4);
-        if (size === 0) { offset += 8; continue; }
+        if (size === 0) {
+          offset += 8;
+          continue;
+        }
         if (offset + 8 + size > buf.length) {
           lines.push(buf.subarray(offset + 8).toString("utf8"));
           break;
@@ -82,7 +85,9 @@ async function execInContainer(containerId, command) {
       try {
         const inspect = await dockerAPI("GET", `/exec/${execId}/json`);
         exitCode = inspect.ExitCode || 0;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       resolve({ output: lines.join("").trimEnd(), exitCode });
     });

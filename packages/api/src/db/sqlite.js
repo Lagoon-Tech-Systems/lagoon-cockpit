@@ -65,9 +65,12 @@ function getDb() {
 /** Log an action to the audit log */
 function auditLog(userId, action, target, detail) {
   if (!db) return;
-  db.prepare(
-    "INSERT INTO audit_log (user_id, action, target, detail) VALUES (?, ?, ?, ?)"
-  ).run(userId, action, target, detail || null);
+  db.prepare("INSERT INTO audit_log (user_id, action, target, detail) VALUES (?, ?, ?, ?)").run(
+    userId,
+    action,
+    target,
+    detail || null,
+  );
 }
 
 module.exports = { init, getDb, auditLog };

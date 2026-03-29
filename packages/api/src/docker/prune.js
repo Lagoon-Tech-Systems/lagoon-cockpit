@@ -30,8 +30,8 @@ async function systemPrune(includeVolumes = false) {
       spaceReclaimed: imagePrune.SpaceReclaimed || 0,
     },
     volumes: {
-      deleted: includeVolumes ? (volumePrune.VolumesDeleted || []) : [],
-      spaceReclaimed: includeVolumes ? (volumePrune.SpaceReclaimed || 0) : 0,
+      deleted: includeVolumes ? volumePrune.VolumesDeleted || [] : [],
+      spaceReclaimed: includeVolumes ? volumePrune.SpaceReclaimed || 0 : 0,
       skipped: !includeVolumes,
     },
     networks: {
@@ -40,7 +40,7 @@ async function systemPrune(includeVolumes = false) {
     totalReclaimed:
       (containerPrune.SpaceReclaimed || 0) +
       (imagePrune.SpaceReclaimed || 0) +
-      (includeVolumes ? (volumePrune.SpaceReclaimed || 0) : 0),
+      (includeVolumes ? volumePrune.SpaceReclaimed || 0 : 0),
   };
 }
 

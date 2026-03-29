@@ -7,8 +7,8 @@
 const windows = new Map(); // key -> [timestamps]
 
 const DEFAULTS = {
-  windowMs: 60 * 1000,  // 1 minute
-  max: 100,             // requests per window
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // requests per window
 };
 
 /**
@@ -67,12 +67,15 @@ const strictLimiter = createRateLimiter({
 });
 
 // Cleanup stale entries every 5 minutes
-setInterval(() => {
-  const cutoff = Date.now() - 5 * 60 * 1000;
-  for (const [key, timestamps] of windows) {
-    while (timestamps.length > 0 && timestamps[0] <= cutoff) timestamps.shift();
-    if (timestamps.length === 0) windows.delete(key);
-  }
-}, 5 * 60 * 1000);
+setInterval(
+  () => {
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    for (const [key, timestamps] of windows) {
+      while (timestamps.length > 0 && timestamps[0] <= cutoff) timestamps.shift();
+      if (timestamps.length === 0) windows.delete(key);
+    }
+  },
+  5 * 60 * 1000,
+);
 
 module.exports = { createRateLimiter, globalLimiter, strictLimiter };

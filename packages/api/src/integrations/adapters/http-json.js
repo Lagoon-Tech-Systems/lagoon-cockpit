@@ -59,9 +59,7 @@ class HttpJsonAdapter extends BaseAdapter {
 
     if (mappings.length === 0) {
       // No mappings — store raw response as a single event
-      points.push(
-        createEvent(this.name, "", "API Response", "info", JSON.stringify(body).slice(0, 4096))
-      );
+      points.push(createEvent(this.name, "", "API Response", "info", JSON.stringify(body).slice(0, 4096)));
       return points;
     }
 
@@ -80,14 +78,12 @@ class HttpJsonAdapter extends BaseAdapter {
               mapping.name || mapping.path,
               numValue,
               mapping.unit || "",
-              mapping.labels || {}
-            )
+              mapping.labels || {},
+            ),
           );
         } else {
           // Non-numeric value — store as event
-          points.push(
-            createEvent(this.name, "", mapping.name || mapping.path, "info", String(value))
-          );
+          points.push(createEvent(this.name, "", mapping.name || mapping.path, "info", String(value)));
         }
       } catch {
         // Skip failed mappings
@@ -98,7 +94,7 @@ class HttpJsonAdapter extends BaseAdapter {
   }
 
   _headers() {
-    const headers = { "Accept": "application/json" };
+    const headers = { Accept: "application/json" };
     if (this.config.headers) {
       Object.assign(headers, this.config.headers);
     }

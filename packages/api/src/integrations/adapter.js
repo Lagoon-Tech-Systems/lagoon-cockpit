@@ -11,11 +11,11 @@
 
 class BaseAdapter {
   constructor(config) {
-    this.name = "";          // Machine name, e.g., "prometheus"
-    this.displayName = "";   // Human name, e.g., "Prometheus"
+    this.name = ""; // Machine name, e.g., "prometheus"
+    this.displayName = ""; // Human name, e.g., "Prometheus"
     this.version = "1.0.0";
-    this.pollInterval = 30;  // seconds
-    this.config = config;    // User-provided config (URL, API key, etc.)
+    this.pollInterval = 30; // seconds
+    this.config = config; // User-provided config (URL, API key, etc.)
   }
 
   /**

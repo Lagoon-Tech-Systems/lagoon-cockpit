@@ -36,9 +36,7 @@ function createUser(email, password, role = "viewer") {
   if (existing) throw new Error("User already exists");
 
   const hash = bcrypt.hashSync(password, 10);
-  const result = db.prepare(
-    "INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)"
-  ).run(email, hash, role);
+  const result = db.prepare("INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)").run(email, hash, role);
 
   return { id: result.lastInsertRowid, email, role };
 }
@@ -46,9 +44,7 @@ function createUser(email, password, role = "viewer") {
 /** List all users (admin only) */
 function listUsers() {
   if (!db) throw new Error("User database not initialized");
-  return db
-    .prepare("SELECT id, email, role, created_at, last_login FROM users")
-    .all();
+  return db.prepare("SELECT id, email, role, created_at, last_login FROM users").all();
 }
 
 /** Delete a user (admin only) */

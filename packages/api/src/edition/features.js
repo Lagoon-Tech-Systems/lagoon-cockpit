@@ -6,41 +6,41 @@
 // Every feature and the minimum edition that includes it
 const FEATURE_EDITIONS = {
   // ── CE features (always available) ───────────────────────
-  containers:         "ce",
-  stacks:             "ce",
-  system_metrics:     "ce",
-  alerts_basic:       "ce",     // up to CE limit
-  sse_stream:         "ce",
-  cli:                "ce",
-  biometric_lock:     "ce",
-  push_basic:         "ce",     // registration only, no advanced channels
-  webhooks_basic:     "ce",     // up to CE limit
-  schedules_basic:    "ce",     // up to CE limit
-  integrations_basic: "ce",     // up to CE limit (2 built-in)
+  containers: "ce",
+  stacks: "ce",
+  system_metrics: "ce",
+  alerts_basic: "ce", // up to CE limit
+  sse_stream: "ce",
+  cli: "ce",
+  biometric_lock: "ce",
+  push_basic: "ce", // registration only, no advanced channels
+  webhooks_basic: "ce", // up to CE limit
+  schedules_basic: "ce", // up to CE limit
+  integrations_basic: "ce", // up to CE limit (2 built-in)
 
   // ── Pro features ─────────────────────────────────────────
   push_notifications: "pro",
-  incidents:          "pro",
-  remediation:        "pro",
-  status_pages:       "pro",
-  uptime_monitoring:  "pro",
-  chatops:            "pro",
-  rbac:               "pro",
-  audit_trail:        "pro",
-  sla:                "pro",
-  multi_server:       "pro",    // unlimited servers
-  alerts_unlimited:   "pro",
+  incidents: "pro",
+  remediation: "pro",
+  status_pages: "pro",
+  uptime_monitoring: "pro",
+  chatops: "pro",
+  rbac: "pro",
+  audit_trail: "pro",
+  sla: "pro",
+  multi_server: "pro", // unlimited servers
+  alerts_unlimited: "pro",
   webhooks_unlimited: "pro",
-  schedules_unlimited:"pro",
-  integrations_pro:   "pro",    // up to Pro limit (10)
-  reports:            "pro",
+  schedules_unlimited: "pro",
+  integrations_pro: "pro", // up to Pro limit (10)
+  reports: "pro",
 
   // ── Enterprise features ──────────────────────────────────
-  sso_saml:           "enterprise",
-  white_label:        "enterprise",
-  custom_roles:       "enterprise",
-  ip_allowlist:       "enterprise",
-  mtls:               "enterprise",
+  sso_saml: "enterprise",
+  white_label: "enterprise",
+  custom_roles: "enterprise",
+  ip_allowlist: "enterprise",
+  mtls: "enterprise",
   encryption_at_rest: "enterprise",
   integrations_unlimited: "enterprise",
   compliance_logging: "enterprise",
@@ -51,7 +51,7 @@ const EDITION_RANK = {
   ce: 0,
   pro: 1,
   enterprise: 2,
-  private: 3,  // Private gets everything
+  private: 3, // Private gets everything
 };
 
 // Default limits for CE (no license key)

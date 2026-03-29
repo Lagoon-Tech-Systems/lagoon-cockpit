@@ -54,9 +54,13 @@ function generateRefreshToken(userId, role, fingerprint) {
   const expiresAt = Date.now() + REFRESH_TTL_MS;
 
   if (db) {
-    db.prepare(
-      "INSERT INTO refresh_tokens (hash, user_id, role, fingerprint, expires_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(hash, userId, role, fingerprint || null, expiresAt);
+    db.prepare("INSERT INTO refresh_tokens (hash, user_id, role, fingerprint, expires_at) VALUES (?, ?, ?, ?, ?)").run(
+      hash,
+      userId,
+      role,
+      fingerprint || null,
+      expiresAt,
+    );
   }
 
   return token;

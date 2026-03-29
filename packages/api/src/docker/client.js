@@ -50,10 +50,10 @@ function dockerAPI(method, path, body = null, opts = {}) {
           let message = raw;
           try {
             message = JSON.parse(raw).message || raw;
-          } catch { /* ignore */ }
-          reject(
-            Object.assign(new Error(message), { statusCode: res.statusCode })
-          );
+          } catch {
+            /* ignore */
+          }
+          reject(Object.assign(new Error(message), { statusCode: res.statusCode }));
           return;
         }
 

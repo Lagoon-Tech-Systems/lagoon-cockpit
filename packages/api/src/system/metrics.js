@@ -69,8 +69,7 @@ function readDisk() {
     const total = parseInt(parts[1], 10);
     const used = parseInt(parts[2], 10);
     const free = parseInt(parts[3], 10);
-    const percent =
-      total > 0 ? Math.round((used / total) * 10000) / 100 : 0;
+    const percent = total > 0 ? Math.round((used / total) * 10000) / 100 : 0;
 
     return { total, used, free, percent, mountpoint: parts[5] };
   } catch {

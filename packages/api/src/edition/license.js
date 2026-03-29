@@ -64,7 +64,9 @@ function loadLicense() {
     const features = decoded.features || availableFeatures(editionName);
     const limits = decoded.limits || defaultLimits(editionName);
 
-    console.log(`[LICENSE] Valid license: ${editionName} | org=${decoded.org || "none"} | expires=${decoded.exp ? new Date(decoded.exp * 1000).toISOString() : "never"}`);
+    console.log(
+      `[LICENSE] Valid license: ${editionName} | org=${decoded.org || "none"} | expires=${decoded.exp ? new Date(decoded.exp * 1000).toISOString() : "never"}`,
+    );
 
     return {
       name: editionName,
@@ -87,7 +89,9 @@ function loadLicense() {
         const editionName = decoded?.edition || "ce";
         const daysLeft = Math.ceil((graceEnd - Date.now()) / (24 * 60 * 60 * 1000));
 
-        console.warn(`[LICENSE] License expired but within grace period (${daysLeft} days left) — ${editionName} features still active`);
+        console.warn(
+          `[LICENSE] License expired but within grace period (${daysLeft} days left) — ${editionName} features still active`,
+        );
 
         return {
           name: editionName,

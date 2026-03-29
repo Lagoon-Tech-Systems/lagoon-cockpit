@@ -42,9 +42,13 @@ function initStore(database) {
 // ── Integration CRUD ───────────────────────────────────────
 
 function createIntegration(id, adapter, name, config, pollInterval) {
-  db.prepare(
-    "INSERT INTO integrations (id, adapter, name, config, poll_interval) VALUES (?, ?, ?, ?, ?)"
-  ).run(id, adapter, name, JSON.stringify(config), pollInterval || 30);
+  db.prepare("INSERT INTO integrations (id, adapter, name, config, poll_interval) VALUES (?, ?, ?, ?, ?)").run(
+    id,
+    adapter,
+    name,
+    JSON.stringify(config),
+    pollInterval || 30,
+  );
 }
 
 function getIntegration(id) {
@@ -79,9 +83,11 @@ function deleteIntegration(id) {
 }
 
 function updateIntegrationStatus(id, status, error) {
-  db.prepare(
-    "UPDATE integrations SET last_pull = datetime('now'), last_status = ?, last_error = ? WHERE id = ?"
-  ).run(status, error || null, id);
+  db.prepare("UPDATE integrations SET last_pull = datetime('now'), last_status = ?, last_error = ? WHERE id = ?").run(
+    status,
+    error || null,
+    id,
+  );
 }
 
 function countIntegrations() {
@@ -91,9 +97,7 @@ function countIntegrations() {
 // ── Integration data ───────────────────────────────────────
 
 function storeDataPoints(integrationId, dataPoints) {
-  const stmt = db.prepare(
-    "INSERT INTO integration_data (integration_id, type, data, timestamp) VALUES (?, ?, ?, ?)"
-  );
+  const stmt = db.prepare("INSERT INTO integration_data (integration_id, type, data, timestamp) VALUES (?, ?, ?, ?)");
 
   const insertMany = db.transaction((points) => {
     for (const point of points) {
@@ -131,10 +135,13 @@ function queryData(integrationId, opts = {}) {
     sql += " LIMIT 500";
   }
 
-  return db.prepare(sql).all(...params).map((r) => ({
-    ...r,
-    data: JSON.parse(r.data),
-  }));
+  return db
+    .prepare(sql)
+    .all(...params)
+    .map((r) => ({
+      ...r,
+      data: JSON.parse(r.data),
+    }));
 }
 
 /** Clean up data older than retention period */

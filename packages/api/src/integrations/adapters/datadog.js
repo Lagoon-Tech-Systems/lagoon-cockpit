@@ -58,8 +58,8 @@ class DatadogAdapter extends BaseAdapter {
               mon.name || "Datadog Monitor",
               this._mapPriority(mon.priority),
               this._mapMonitorStatus(mon.overall_state),
-              `https://app.${this._site()}/monitors/${mon.id}`
-            )
+              `https://app.${this._site()}/monitors/${mon.id}`,
+            ),
           );
         }
       }
@@ -72,23 +72,17 @@ class DatadogAdapter extends BaseAdapter {
     const fiveMinAgo = now - 300;
 
     try {
-      const res = await safeFetch(
-        `${this._baseUrl()}/events?start=${fiveMinAgo}&end=${now}`,
-        { headers: this._headers(), signal: AbortSignal.timeout(15000) }
-      );
+      const res = await safeFetch(`${this._baseUrl()}/events?start=${fiveMinAgo}&end=${now}`, {
+        headers: this._headers(),
+        signal: AbortSignal.timeout(15000),
+      });
 
       if (res.ok) {
         const body = await res.json();
         const events = body.events || [];
         for (const evt of events) {
           points.push(
-            createEvent(
-              this.name,
-              "",
-              evt.title || "Datadog Event",
-              evt.alert_type || "info",
-              evt.text || ""
-            )
+            createEvent(this.name, "", evt.title || "Datadog Event", evt.alert_type || "info", evt.text || ""),
           );
         }
       }
@@ -101,7 +95,7 @@ class DatadogAdapter extends BaseAdapter {
       const query = "avg:system.cpu.user{*}";
       const res = await safeFetch(
         `${this._baseUrl()}/query?query=${encodeURIComponent(query)}&from=${fiveMinAgo}&to=${now}`,
-        { headers: this._headers(), signal: AbortSignal.timeout(15000) }
+        { headers: this._headers(), signal: AbortSignal.timeout(15000) },
       );
 
       if (res.ok) {
@@ -111,14 +105,10 @@ class DatadogAdapter extends BaseAdapter {
           const lastPoint = s.pointlist?.[s.pointlist.length - 1];
           if (lastPoint) {
             points.push(
-              createMetric(
-                this.name,
-                "",
-                s.metric || "system.cpu.user",
-                lastPoint[1],
-                "percent",
-                { scope: s.scope || "", display_name: s.display_name || "" }
-              )
+              createMetric(this.name, "", s.metric || "system.cpu.user", lastPoint[1], "percent", {
+                scope: s.scope || "",
+                display_name: s.display_name || "",
+              }),
             );
           }
         }

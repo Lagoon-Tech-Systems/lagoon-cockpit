@@ -18,14 +18,7 @@ const { broadcast, getClientCount, closeAllClients } = require("./stream/sse");
 const { init: initPush, sendPushNotification } = require("./push/expo");
 
 // Security module
-const {
-  securityHeaders,
-  globalLimiter,
-  strictCors,
-  enhancedAudit,
-  requestId,
-  forceHttps,
-} = require("./security");
+const { securityHeaders, globalLimiter, strictCors, enhancedAudit, requestId, forceHttps } = require("./security");
 
 // Edition system
 const { loadLicense } = require("./edition/license");
@@ -170,24 +163,35 @@ async function broadcastLoop() {
     metricsHistory.recordMetrics(metrics, containerStats);
     if (!app.locals.maintenanceMode) alertEngine.evaluateRules(metrics, containerStats);
     broadcast("metrics", metrics);
-    broadcast("containers", allContainers.map((c) => ({
-      id: c.id, name: c.name, state: c.state, health: c.health, image: c.image, composeProject: c.composeProject,
-    })));
+    broadcast(
+      "containers",
+      allContainers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        state: c.state,
+        health: c.health,
+        image: c.image,
+        composeProject: c.composeProject,
+      })),
+    );
     for (const c of allContainers) {
       const prev = previousContainerStates[c.id];
       if (prev && prev !== c.state) {
         const alert = {
-          type: "container_state_change", containerId: c.id, containerName: c.name,
-          previousState: prev, currentState: c.state, timestamp: new Date().toISOString(),
+          type: "container_state_change",
+          containerId: c.id,
+          containerName: c.name,
+          previousState: prev,
+          currentState: c.state,
+          timestamp: new Date().toISOString(),
         };
         broadcast("alert", alert);
 
         if (c.state !== "running" && prev === "running" && !app.locals.maintenanceMode) {
-          sendPushNotification(
-            `Container Down: ${c.name}`,
-            `${c.name} changed from ${prev} to ${c.state}`,
-            { type: "container", containerId: c.id }
-          ).catch(() => {});
+          sendPushNotification(`Container Down: ${c.name}`, `${c.name} changed from ${prev} to ${c.state}`, {
+            type: "container",
+            containerId: c.id,
+          }).catch(() => {});
           webhooks.fireWebhooks("container.down", alert).catch(() => {});
         }
         webhooks.fireWebhooks("container.state_change", alert).catch(() => {});
@@ -197,7 +201,9 @@ async function broadcastLoop() {
 
     const currentIds = new Set(allContainers.map((c) => c.id));
     for (const id of Object.keys(previousContainerStates)) if (!currentIds.has(id)) delete previousContainerStates[id];
-  } catch (err) { console.error("[SSE] Broadcast error:", err.message); }
+  } catch (err) {
+    console.error("[SSE] Broadcast error:", err.message);
+  }
 }
 
 const broadcastInterval = setInterval(broadcastLoop, 15000);
@@ -214,11 +220,18 @@ function shutdown(signal) {
   stopIntegrations();
   closeAllClients();
   server.close(() => {
-    try { db.pragma("wal_checkpoint(TRUNCATE)"); } catch { /* ignore */ }
+    try {
+      db.pragma("wal_checkpoint(TRUNCATE)");
+    } catch {
+      /* ignore */
+    }
     console.log("[COCKPIT] HTTP server closed");
     process.exit(0);
   });
-  setTimeout(() => { console.error("[COCKPIT] Forced exit after 5s timeout"); process.exit(1); }, 5000);
+  setTimeout(() => {
+    console.error("[COCKPIT] Forced exit after 5s timeout");
+    process.exit(1);
+  }, 5000);
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

@@ -21,7 +21,8 @@ router.post("/api/alerts/rules", requireAuth, requireRole("admin"), (req, res) =
     if (!limit.allowed) {
       return res.status(402).json({
         error: `Alert rule limit reached (${limit.max})`,
-        current: limit.current, max: limit.max,
+        current: limit.current,
+        max: limit.max,
         upgradeUrl: "https://lagoontechsystems.com/upgrade",
       });
     }
@@ -80,7 +81,8 @@ router.post("/api/webhooks", requireAuth, requireRole("admin"), (req, res) => {
     if (!limit.allowed) {
       return res.status(402).json({
         error: `Webhook limit reached (${limit.max})`,
-        current: limit.current, max: limit.max,
+        current: limit.current,
+        max: limit.max,
         upgradeUrl: "https://lagoontechsystems.com/upgrade",
       });
     }
@@ -120,7 +122,8 @@ router.post("/api/schedules", requireAuth, requireRole("admin"), (req, res) => {
     if (!limit.allowed) {
       return res.status(402).json({
         error: `Schedule limit reached (${limit.max})`,
-        current: limit.current, max: limit.max,
+        current: limit.current,
+        max: limit.max,
         upgradeUrl: "https://lagoontechsystems.com/upgrade",
       });
     }
@@ -186,9 +189,7 @@ router.get("/api/audit", requireAuth, requireRole("admin"), (req, res) => {
   const db = getDb();
   const limit = Math.min(Math.max(parseInt(req.query.limit || "50", 10), 1), 500);
   const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
-  const logs = db
-    .prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?")
-    .all(limit, offset);
+  const logs = db.prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
   res.json({ logs });
 });
 

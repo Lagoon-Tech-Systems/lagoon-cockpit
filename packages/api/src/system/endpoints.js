@@ -14,25 +14,21 @@ function probeEndpoint(name, url, expectedStatus = 200, timeout = 15000) {
     const startTime = Date.now();
     const client = url.startsWith("https") ? https : http;
 
-    const req = client.get(
-      url,
-      { timeout, rejectUnauthorized: false },
-      (res) => {
-        // Consume response body
-        res.resume();
-        res.on("end", () => {
-          const elapsed = Date.now() - startTime;
-          resolve({
-            name,
-            url,
-            status: res.statusCode,
-            expected: expectedStatus,
-            healthy: res.statusCode === expectedStatus,
-            responseTime: elapsed,
-          });
+    const req = client.get(url, { timeout, rejectUnauthorized: false }, (res) => {
+      // Consume response body
+      res.resume();
+      res.on("end", () => {
+        const elapsed = Date.now() - startTime;
+        resolve({
+          name,
+          url,
+          status: res.statusCode,
+          expected: expectedStatus,
+          healthy: res.statusCode === expectedStatus,
+          responseTime: elapsed,
         });
-      }
-    );
+      });
+    });
 
     req.on("error", (err) => {
       resolve({

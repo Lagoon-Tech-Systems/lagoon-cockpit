@@ -2,9 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const DEFAULT_EXTENSIONS_DIR = path.resolve(__dirname, "..", "..", "extensions");
-const EXTENSIONS_DIR = process.env.EXTENSIONS_DIR
-  ? path.resolve(process.env.EXTENSIONS_DIR)
-  : DEFAULT_EXTENSIONS_DIR;
+const EXTENSIONS_DIR = process.env.EXTENSIONS_DIR ? path.resolve(process.env.EXTENSIONS_DIR) : DEFAULT_EXTENSIONS_DIR;
 
 /**
  * Load all extensions from the extensions directory.
@@ -63,8 +61,8 @@ function loadExtensions(app, db, services) {
 
       // Check for package.json or index.js
       const hasPackageJson = fs.existsSync(path.join(realExtPath, "package.json"));
-      const hasIndex = fs.existsSync(path.join(realExtPath, "index.js")) ||
-                       fs.existsSync(path.join(realExtPath, "src", "index.js"));
+      const hasIndex =
+        fs.existsSync(path.join(realExtPath, "index.js")) || fs.existsSync(path.join(realExtPath, "src", "index.js"));
 
       if (!hasPackageJson && !hasIndex) {
         console.warn(`[EXT] ${entry}: no package.json or index.js, skipping`);

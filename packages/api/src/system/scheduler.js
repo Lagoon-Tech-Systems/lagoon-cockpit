@@ -46,9 +46,7 @@ function init(database, auditLog) {
   `);
 
   // Load and start all enabled schedules
-  const schedules = db
-    .prepare("SELECT * FROM scheduled_actions WHERE enabled = 1")
-    .all();
+  const schedules = db.prepare("SELECT * FROM scheduled_actions WHERE enabled = 1").all();
   for (const schedule of schedules) {
     startTimer(schedule);
   }
@@ -177,27 +175,24 @@ async function executeAction(schedule) {
 
   try {
     await fn();
-    console.log(
-      `[SCHEDULER] Executed ${schedule.action} on ${schedule.container_name} (schedule: ${schedule.name})`
-    );
+    console.log(`[SCHEDULER] Executed ${schedule.action} on ${schedule.container_name} (schedule: ${schedule.name})`);
   } catch (err) {
     success = false;
     error = err.message || "Unknown error";
-    console.error(
-      `[SCHEDULER] Failed ${schedule.action} on ${schedule.container_name}: ${error}`
-    );
+    console.error(`[SCHEDULER] Failed ${schedule.action} on ${schedule.container_name}: ${error}`);
   }
 
   // Update last_run and next_run
   const nextRun = computeNextRun(schedule.cron_expression);
-  db.prepare(
-    "UPDATE scheduled_actions SET last_run = datetime('now'), next_run = ? WHERE id = ?"
-  ).run(nextRun, schedule.id);
+  db.prepare("UPDATE scheduled_actions SET last_run = datetime('now'), next_run = ? WHERE id = ?").run(
+    nextRun,
+    schedule.id,
+  );
 
   // Log to schedule_history
   db.prepare(
     `INSERT INTO schedule_history (schedule_id, schedule_name, container_id, container_name, action, success, error)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     schedule.id,
     schedule.name,
@@ -205,7 +200,7 @@ async function executeAction(schedule) {
     schedule.container_name,
     schedule.action,
     success ? 1 : 0,
-    error
+    error,
   );
 
   // Audit log
@@ -214,7 +209,7 @@ async function executeAction(schedule) {
       "scheduler",
       `schedule.${schedule.action}`,
       schedule.container_id,
-      `${schedule.name}: ${schedule.action} ${schedule.container_name}${error ? ` [FAILED: ${error}]` : ""}`
+      `${schedule.name}: ${schedule.action} ${schedule.container_name}${error ? ` [FAILED: ${error}]` : ""}`,
     );
   }
 }
@@ -246,13 +241,11 @@ function createSchedule(name, containerId, containerName, action, cronExpression
   const result = db
     .prepare(
       `INSERT INTO scheduled_actions (name, container_id, container_name, action, cron_expression, next_run)
-       VALUES (?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
     .run(name, containerId, containerName, action, cronExpression, nextRun);
 
-  const schedule = db
-    .prepare("SELECT * FROM scheduled_actions WHERE id = ?")
-    .get(result.lastInsertRowid);
+  const schedule = db.prepare("SELECT * FROM scheduled_actions WHERE id = ?").get(result.lastInsertRowid);
 
   // Start the timer
   startTimer(schedule);
@@ -270,40 +263,26 @@ function deleteSchedule(id) {
 }
 
 function toggleSchedule(id, enabled) {
-  db.prepare("UPDATE scheduled_actions SET enabled = ? WHERE id = ?").run(
-    enabled ? 1 : 0,
-    id
-  );
+  db.prepare("UPDATE scheduled_actions SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
 
-  const schedule = db
-    .prepare("SELECT * FROM scheduled_actions WHERE id = ?")
-    .get(id);
+  const schedule = db.prepare("SELECT * FROM scheduled_actions WHERE id = ?").get(id);
 
   if (!schedule) return null;
 
   if (enabled) {
     // Recompute next_run when re-enabling
     const nextRun = computeNextRun(schedule.cron_expression);
-    db.prepare("UPDATE scheduled_actions SET next_run = ? WHERE id = ?").run(
-      nextRun,
-      id
-    );
+    db.prepare("UPDATE scheduled_actions SET next_run = ? WHERE id = ?").run(nextRun, id);
     startTimer(schedule);
   } else {
     stopTimer(id);
   }
 
-  return db
-    .prepare("SELECT * FROM scheduled_actions WHERE id = ?")
-    .get(id);
+  return db.prepare("SELECT * FROM scheduled_actions WHERE id = ?").get(id);
 }
 
 function getScheduleHistory(limit = 50) {
-  return db
-    .prepare(
-      "SELECT * FROM schedule_history ORDER BY executed_at DESC LIMIT ?"
-    )
-    .all(limit);
+  return db.prepare("SELECT * FROM schedule_history ORDER BY executed_at DESC LIMIT ?").all(limit);
 }
 
 module.exports = {
