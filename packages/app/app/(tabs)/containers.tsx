@@ -8,6 +8,7 @@ import Skeleton from '../../src/components/Skeleton';
 import { Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW } from '../../src/theme/tokens';
+import { useLayout } from '../../src/hooks/useLayout';
 import * as Haptics from 'expo-haptics';
 
 type Filter = 'all' | 'running' | 'stopped' | 'unhealthy';
@@ -345,6 +346,7 @@ export default function ContainersScreen() {
 
 function LinuxContainersView() {
   const router = useRouter();
+  const layout = useLayout();
   const { containers, setContainers } = useDashboardStore();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -557,7 +559,10 @@ function LinuxContainersView() {
       {/* Container list */}
       {(isLoaded || containers.length > 0) && (
         <FlatList
+          key={`list-${layout.listColumns}`}
           data={filtered}
+          numColumns={layout.listColumns}
+          columnWrapperStyle={layout.listColumns > 1 ? { gap: SPACING.sm } : undefined}
           renderItem={({ item, index }) => {
             // Ensure we have an animated value for this index
             while (fadeAnims.length <= index) {
@@ -576,7 +581,7 @@ function LinuxContainersView() {
               }).start();
             }
             return (
-              <Animated.View style={{ opacity: fadeAnim }}>
+              <Animated.View style={[{ opacity: fadeAnim }, layout.listColumns > 1 && { flex: 1 }]}>
                 <ContainerCard
                   container={item}
                   onPress={() => bulkMode ? toggleSelect(item.id) : router.push(`/containers/${item.id}`)}

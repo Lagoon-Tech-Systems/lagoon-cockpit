@@ -9,7 +9,17 @@ function securityHeaders() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'none'"],
+        scriptSrc: ["'none'"],
+        styleSrc: ["'none'"],
+        imgSrc: ["'none'"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'none'"],
         frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+        baseUri: ["'none'"],
+        upgradeInsecureRequests: [],
       },
     },
     crossOriginEmbedderPolicy: true,

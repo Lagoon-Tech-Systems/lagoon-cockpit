@@ -11,6 +11,7 @@ import ErrorBoundary from '../src/components/ErrorBoundary';
 import { EditionProvider } from '../src/edition/EditionProvider';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 import { COLORS } from '../src/theme/tokens';
+import ConnectionBanner from '../src/components/ConnectionBanner';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,6 +68,7 @@ function AppContent() {
     <EditionProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} onLayout={onLayoutReady}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
+        <ConnectionBanner />
         <Stack
           screenOptions={{
             headerShown: false,

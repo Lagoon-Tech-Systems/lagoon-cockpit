@@ -208,6 +208,18 @@ async function broadcastLoop() {
 
 const broadcastInterval = setInterval(broadcastLoop, 15000);
 
+// Periodic WAL checkpoint every 5 minutes (prevents WAL file from growing unbounded)
+const walCheckpointInterval = setInterval(
+  () => {
+    try {
+      db.pragma("wal_checkpoint(PASSIVE)");
+    } catch (err) {
+      console.error("[COCKPIT] WAL checkpoint error:", err.message);
+    }
+  },
+  5 * 60 * 1000,
+);
+
 const server = app.listen(PORT, () => {
   console.log(`[COCKPIT] API on :${PORT} | ${SERVER_NAME} | auth=${AUTH_MODE} | edition=${edition.name} | SSE=15s`);
 });
@@ -217,6 +229,7 @@ const { stopAll: stopIntegrations } = require("./integrations/scheduler");
 function shutdown(signal) {
   console.log(`[COCKPIT] ${signal} received — shutting down gracefully`);
   clearInterval(broadcastInterval);
+  clearInterval(walCheckpointInterval);
   stopIntegrations();
   closeAllClients();
   server.close(() => {

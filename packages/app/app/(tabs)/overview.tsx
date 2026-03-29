@@ -6,6 +6,7 @@ import { useDashboardStore } from '../../src/stores/dashboardStore';
 import { apiFetch } from '../../src/lib/api';
 import { useRouter } from 'expo-router';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW } from '../../src/theme/tokens';
+import { useLayout } from '../../src/hooks/useLayout';
 import { GlassCard } from '../../src/components/ui/GlassCard';
 import { TactileCard } from '../../src/components/ui/TactileCard';
 import { StatusDot } from '../../src/components/ui/StatusDot';
@@ -198,6 +199,7 @@ function FadeSlideIn({ delay, children }: { delay: number; children: React.React
 /* ─── Main Screen ─── */
 export default function OverviewScreen() {
   const router = useRouter();
+  const layout = useLayout();
   const { serverName, disconnect } = useServerStore();
   const { overview, setOverview, containers, setContainers, stacks, setStacks, alerts } = useDashboardStore();
   const platform = useDashboardStore((s) => s.platform);
@@ -256,7 +258,7 @@ export default function OverviewScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, layout.isTablet && styles.contentTablet]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -601,6 +603,7 @@ export default function OverviewScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: SPACING.lg, paddingBottom: 48, backgroundColor: COLORS.bgDeep },
+  contentTablet: { paddingHorizontal: SPACING.xxxl, maxWidth: 960, alignSelf: 'center', width: '100%' as any },
 
   /* Header */
   headerBanner: {

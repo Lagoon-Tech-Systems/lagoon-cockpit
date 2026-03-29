@@ -38,6 +38,33 @@ function generateId() {
   return crypto.randomUUID();
 }
 
+/** Derive a 256-bit key from a passphrase (deterministic, for at-rest encryption) */
+function deriveKey(secret) {
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+/** AES-256-GCM encrypt. Returns "iv:authTag:ciphertext" (all hex). */
+function encrypt(plaintext, secret) {
+  const key = deriveKey(secret);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  let enc = cipher.update(plaintext, "utf8", "hex");
+  enc += cipher.final("hex");
+  const tag = cipher.getAuthTag().toString("hex");
+  return `${iv.toString("hex")}:${tag}:${enc}`;
+}
+
+/** AES-256-GCM decrypt. Input format: "iv:authTag:ciphertext" (all hex). */
+function decrypt(encrypted, secret) {
+  const key = deriveKey(secret);
+  const [ivHex, tagHex, ciphertext] = encrypted.split(":");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivHex, "hex"));
+  decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+  let dec = decipher.update(ciphertext, "hex", "utf8");
+  dec += decipher.final("utf8");
+  return dec;
+}
+
 /** Generate a request fingerprint from IP + User-Agent */
 function requestFingerprint(req) {
   const ip = req.ip || req.connection.remoteAddress || "unknown";
@@ -52,4 +79,6 @@ module.exports = {
   hmacSha256,
   generateId,
   requestFingerprint,
+  encrypt,
+  decrypt,
 };

@@ -14,19 +14,7 @@ let db = null;
 /** Initialize JWT module with SQLite database for persistent refresh tokens */
 function initJwt(database) {
   db = database;
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS refresh_tokens (
-      hash TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      role TEXT NOT NULL,
-      fingerprint TEXT,
-      expires_at INTEGER NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
-    CREATE INDEX IF NOT EXISTS idx_refresh_expires ON refresh_tokens(expires_at);
-  `);
-
-  // Cleanup expired tokens on init
+  // Table created by versioned migrations in db/sqlite.js
   cleanupRefreshTokens();
 }
 
