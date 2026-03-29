@@ -15,12 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
         with:
-          ref: develop
+          ref: main
       - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
         with:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: cd node_modules/better-sqlite3 && npx --yes prebuild-install || npm run build-release
       - run: npx eslint packages/api/src
       - run: cd packages/api && npm test
       - run: npm audit --audit-level=high --workspaces
@@ -31,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
         with:
-          ref: develop
+          ref: main
       - run: docker build --no-cache -t cockpit-nightly packages/api
 
   container-scan:
@@ -41,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
         with:
-          ref: develop
+          ref: main
       - run: docker build -t cockpit-scan packages/api
       - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
@@ -56,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
         with:
-          ref: develop
+          ref: main
       - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
         with:
           node-version: 20
