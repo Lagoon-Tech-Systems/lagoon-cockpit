@@ -87,5 +87,7 @@ jobs:
             -e AUTH_MODE=key \
             cockpit-api-test
           sleep 3
-          docker exec cockpit-test wget -qO- http://localhost:3000/health | grep -q '"checks"'
+          HEALTH=$(docker exec cockpit-test wget -qO- http://localhost:3000/ 2>&1 || true)
+          echo "$HEALTH"
+          echo "$HEALTH" | grep -q '"status":"ok"'
           docker stop cockpit-test
