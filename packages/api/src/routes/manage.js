@@ -189,8 +189,24 @@ router.get("/api/audit", requireAuth, requireRole("admin"), (req, res) => {
   const db = getDb();
   const limit = Math.min(Math.max(parseInt(req.query.limit || "50", 10), 1), 500);
   const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
-  const { total } = db.prepare("SELECT COUNT(*) as total FROM audit_log").get();
-  const logs = db.prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
+  const { action, user } = req.query;
+
+  const conditions = [];
+  const params = [];
+  if (action) {
+    conditions.push("action = ?");
+    params.push(action);
+  }
+  if (user) {
+    conditions.push("user_id = ?");
+    params.push(user);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const { total } = db.prepare(`SELECT COUNT(*) as total FROM audit_log ${where}`).get(...params);
+  const logs = db
+    .prepare(`SELECT * FROM audit_log ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+    .all(...params, limit, offset);
   res.json({ logs, total, limit, offset });
 });
 

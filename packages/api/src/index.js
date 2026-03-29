@@ -222,13 +222,16 @@ const walCheckpointInterval = setInterval(
 
 // Daily audit log rotation — prune entries older than retention period
 const { pruneAuditLog } = require("./db/sqlite");
-const auditPruneInterval = setInterval(() => {
-  try {
-    pruneAuditLog();
-  } catch (err) {
-    console.error("[COCKPIT] Audit log prune error:", err.message);
-  }
-}, 24 * 60 * 60 * 1000);
+const auditPruneInterval = setInterval(
+  () => {
+    try {
+      pruneAuditLog();
+    } catch (err) {
+      console.error("[COCKPIT] Audit log prune error:", err.message);
+    }
+  },
+  24 * 60 * 60 * 1000,
+);
 
 const server = app.listen(PORT, () => {
   console.log(`[COCKPIT] API on :${PORT} | ${SERVER_NAME} | auth=${AUTH_MODE} | edition=${edition.name} | SSE=15s`);

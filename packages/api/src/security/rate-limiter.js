@@ -145,7 +145,7 @@ const strictLimiter = createRateLimiter({
 const userLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_USER_MAX || "200", 10),
-  keyFn: (req) => (req.user && req.user.id) ? `user:${req.user.id}` : req.ip || req.connection.remoteAddress,
+  keyFn: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip || req.connection.remoteAddress),
 });
 
 module.exports = { createRateLimiter, globalLimiter, strictLimiter, userLimiter, setStore, RedisStore, MemoryStore };

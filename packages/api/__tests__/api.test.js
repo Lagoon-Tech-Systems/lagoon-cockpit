@@ -88,9 +88,12 @@ app.get("/health", async (_req, res) => {
   res.status(status).json({ status: status === 200 ? "ok" : "degraded", checks, uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
+const manageRoutes = require("../src/routes/manage");
+
 app.use(authRoutes);
 app.use(systemRoutes);
 app.use(containerRoutes);
+app.use(manageRoutes);
 
 // ── Helpers ──────────────────────────────────────────────
 let accessToken = null;
@@ -245,6 +248,62 @@ describe("Container operations", () => {
   test("GET /api/containers requires auth", async () => {
     const res = await request(app).get("/api/containers");
     expect(res.status).toBe(401);
+  });
+});
+
+// ── Audit Log Filtering Tests ───────────────────────────
+describe("GET /api/audit filtering", () => {
+  beforeAll(() => {
+    const { auditLog } = require("../src/db/sqlite");
+    auditLog("user-a", "stack.start", "stack-1", "started");
+    auditLog("user-a", "stack.stop", "stack-2", "stopped");
+    auditLog("user-b", "user.login", null, "logged in");
+    auditLog("user-b", "stack.start", "stack-3", "started");
+  });
+
+  test("returns all logs without filters", async () => {
+    const res = await request(app)
+      .get("/api/audit")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBeGreaterThanOrEqual(4);
+  });
+
+  test("filters by action", async () => {
+    const res = await request(app)
+      .get("/api/audit?action=stack.start")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.logs.every((l) => l.action === "stack.start")).toBe(true);
+    expect(res.body.total).toBe(2);
+  });
+
+  test("filters by user", async () => {
+    const res = await request(app)
+      .get("/api/audit?user=user-a")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.logs.every((l) => l.user_id === "user-a")).toBe(true);
+    expect(res.body.total).toBe(2);
+  });
+
+  test("filters by both action and user", async () => {
+    const res = await request(app)
+      .get("/api/audit?action=stack.start&user=user-b")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.logs[0].user_id).toBe("user-b");
+    expect(res.body.logs[0].action).toBe("stack.start");
+  });
+
+  test("returns empty when filter matches nothing", async () => {
+    const res = await request(app)
+      .get("/api/audit?action=nonexistent.action")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+    expect(res.body.logs).toEqual([]);
   });
 });
 
