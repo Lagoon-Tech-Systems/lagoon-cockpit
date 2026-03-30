@@ -1,27 +1,31 @@
-import { useEffect, useRef } from 'react';
-import { Animated, type ViewStyle } from 'react-native';
+import { useEffect } from 'react';
+import { type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { COLORS } from '../theme/tokens';
 
 interface SkeletonProps {
   width: number | string;
   height: number;
   borderRadius?: number;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export default function Skeleton({ width, height, borderRadius = 8, style }: SkeletonProps) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
+  const opacity = useSharedValue(0.3);
 
   useEffect(() => {
-    const shimmer = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ]),
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.7, { duration: 800 }),
+        withTiming(0.3, { duration: 800 }),
+      ),
+      -1,
     );
-    shimmer.start();
-    return () => shimmer.stop();
-  }, [opacity]);
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
 
   return (
     <Animated.View
@@ -31,9 +35,9 @@ export default function Skeleton({ width, height, borderRadius = 8, style }: Ske
           height,
           borderRadius,
           backgroundColor: COLORS.border,
-          opacity,
         },
-        style,
+        animStyle,
+        style as Record<string, unknown>,
       ]}
     />
   );

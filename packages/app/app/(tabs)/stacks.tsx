@@ -1,4 +1,4 @@
-import { View, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, Animated, Easing, Alert, TextInput } from 'react-native';
+import { View, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import Skeleton from '../../src/components/Skeleton';
 import { useLayout } from '../../src/hooks/useLayout';
 import ScreenErrorBoundary from '../../src/components/ScreenErrorBoundary';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW } from '../../src/theme/tokens';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
+import { FadeIn } from '../../src/components/ui/FadeIn';
 
 type ProcessSortKey = 'cpu' | 'memory';
 
@@ -21,9 +23,6 @@ export default function StacksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const fadeAnims = useRef<Animated.Value[]>([]).current;
-  const animatedIndices = useRef<Set<number>>(new Set()).current;
-
   // Windows-specific state
   const [sortKey, setSortKey] = useState<ProcessSortKey>('cpu');
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,7 +35,7 @@ export default function StacksScreen() {
       setIsLoaded(true);
     } catch (err) {
       console.error('Failed to fetch stacks:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load stacks');
+      setError(sanitizeErrorMessage(err, 'Failed to load stacks'));
     }
   }, [setStacks]);
 
@@ -50,7 +49,7 @@ export default function StacksScreen() {
       setIsLoaded(true);
     } catch (err) {
       console.error('Failed to fetch processes:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load processes');
+      setError(sanitizeErrorMessage(err, 'Failed to load processes'));
     }
   }, [sortKey]);
 
@@ -91,7 +90,7 @@ export default function StacksScreen() {
               );
               useDashboardStore.getState().setProcesses(data.processes);
             } catch (err) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to kill process');
+              Alert.alert('Error', sanitizeErrorMessage(err, 'Failed to kill process'));
             }
           },
         },
@@ -196,23 +195,8 @@ export default function StacksScreen() {
               </View>
             }
             renderItem={({ item, index }) => {
-              while (fadeAnims.length <= index) {
-                fadeAnims.push(new Animated.Value(0));
-              }
-              const fadeAnim = fadeAnims[index];
-              if (!animatedIndices.has(index)) {
-                animatedIndices.add(index);
-                Animated.timing(fadeAnim, {
-                  toValue: 1,
-                  duration: 400,
-                  delay: index * 40,
-                  easing: Easing.out(Easing.ease),
-                  useNativeDriver: true,
-                }).start();
-              }
               return (
-                <View style={listColumns > 1 ? { flex: 1 } : undefined}>
-                <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+                <FadeIn index={index} stagger={40} slide style={listColumns > 1 ? { flex: 1 } : undefined}>
                   <View style={styles.processCard}>
                     <View style={styles.processHeader}>
                       <View style={styles.processNameRow}>
@@ -260,8 +244,7 @@ export default function StacksScreen() {
                       </View>
                     ) : null}
                   </View>
-                </Animated.View>
-                </View>
+                </FadeIn>
               );
             }}
             keyExtractor={(item) => `${item.pid}-${item.name}`}
@@ -312,28 +295,10 @@ export default function StacksScreen() {
           key={`stacks-${listColumns}`}
           {...(listColumns > 1 && { columnWrapperStyle: { gap: SPACING.sm } })}
           renderItem={({ item, index }) => {
-            // Ensure we have an animated value for this index
-            while (fadeAnims.length <= index) {
-              fadeAnims.push(new Animated.Value(0));
-            }
-            const fadeAnim = fadeAnims[index];
-            // Trigger staggered fade-in on first load
-            if (!animatedIndices.has(index)) {
-              animatedIndices.add(index);
-              Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 400,
-                delay: index * 60,
-                easing: Easing.out(Easing.ease),
-                useNativeDriver: true,
-              }).start();
-            }
             return (
-              <View style={listColumns > 1 ? { flex: 1 } : undefined}>
-              <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+              <FadeIn index={index} slide style={listColumns > 1 ? { flex: 1 } : undefined}>
                 <StackCard stack={item} onPress={() => router.push(`/stacks/${item.name}`)} />
-              </Animated.View>
-              </View>
+              </FadeIn>
             );
           }}
           keyExtractor={(item) => item.name}

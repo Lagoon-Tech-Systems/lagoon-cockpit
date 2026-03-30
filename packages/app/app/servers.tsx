@@ -6,11 +6,10 @@ import {
   StyleSheet,
   RefreshControl,
   Platform,
-  Animated,
-  Easing,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withRepeat, withSequence, Easing } from 'react-native-reanimated';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
@@ -90,38 +89,29 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Re
 
 /* ─── Pulsing status dot ─── */
 function PulsingDot({ color, size = 14 }: { color: string; size?: number }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
 
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(scale, { toValue: 1.4, duration: 1000, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
-        ]),
-        Animated.parallel([
-          Animated.timing(scale, { toValue: 1, duration: 1000, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        ]),
-      ]),
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [scale, opacity]);
+    scale.value = withRepeat(withSequence(withTiming(1.4, { duration: 1000 }), withTiming(1, { duration: 1000 })), -1);
+    opacity.value = withRepeat(withSequence(withTiming(0.4, { duration: 1000 }), withTiming(1, { duration: 1000 })), -1);
+  }, []);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
     <View style={{ width: size + 8, height: size + 8, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View
-        style={{
+        style={[{
           position: 'absolute',
           width: size,
           height: size,
           borderRadius: size / 2,
           backgroundColor: color,
-          opacity,
-          transform: [{ scale }],
-        }}
+        }, pulseStyle]}
       />
       <View
         style={{
@@ -157,31 +147,21 @@ function SkeletonCard() {
 
 /* ─── FadeSlideIn ─── */
 function FadeSlideIn({ delay, children }: { delay: number; children: React.ReactNode }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(16)).current;
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(16);
 
   useEffect(() => {
-    const anim = Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 350,
-        delay,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 350,
-        delay,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]);
-    anim.start();
-  }, [opacity, translateY, delay]);
+    opacity.value = withDelay(delay, withTiming(1, { duration: 350, easing: Easing.out(Easing.ease) }));
+    translateY.value = withDelay(delay, withTiming(0, { duration: 350, easing: Easing.out(Easing.ease) }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+    <Animated.View style={animStyle}>
       {children}
     </Animated.View>
   );

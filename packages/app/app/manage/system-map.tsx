@@ -14,6 +14,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { apiFetch } from '../../src/lib/api';
 import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -159,7 +160,7 @@ export default function SystemMapScreen() {
       setLastRefresh(new Date());
     } catch (err) {
       console.error('[SystemMap] fetch error:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load system data');
+      Alert.alert('Error', sanitizeErrorMessage(err, 'Failed to load system data'));
     } finally {
       setLoading(false);
     }

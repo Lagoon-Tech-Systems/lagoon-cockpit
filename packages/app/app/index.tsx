@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW } from '../src/theme/tokens';
+import { sanitizeErrorMessage } from '../src/lib/errors';
 
 export default function ServerSelectScreen() {
   const router = useRouter();
@@ -68,7 +69,7 @@ export default function ServerSelectScreen() {
       router.replace('/(tabs)/overview');
     } catch (err) {
       console.error('[COCKPIT] handleConnect failed:', err);
-      setError(err instanceof Error ? err.message : 'Unknown connection error');
+      setError(sanitizeErrorMessage(err, 'Unknown connection error'));
     } finally {
       setConnecting(false);
       setConnectingId(null);
@@ -118,7 +119,7 @@ export default function ServerSelectScreen() {
       router.replace('/(tabs)/overview');
     } catch (err) {
       console.error('[COCKPIT] handleAdd failed:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(sanitizeErrorMessage(err, 'Unknown error'));
     } finally {
       setConnecting(false);
     }

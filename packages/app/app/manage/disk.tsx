@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/lib/api';
 import { useServerStore } from '../../src/stores/serverStore';
 import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
 
 interface CategoryInfo {
   count: number;
@@ -67,7 +68,7 @@ export default function DiskScreen() {
       setDisk(data);
     } catch (err) {
       console.error('Failed to fetch disk usage:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to fetch disk usage');
+      Alert.alert('Error', sanitizeErrorMessage(err, 'Failed to fetch disk usage'));
     } finally {
       setLoading(false);
     }
@@ -109,7 +110,7 @@ export default function DiskScreen() {
               );
               await fetchDisk();
             } catch (err) {
-              Alert.alert('Prune Failed', err instanceof Error ? err.message : 'System prune failed');
+              Alert.alert('Prune Failed', sanitizeErrorMessage(err, 'System prune failed'));
             } finally {
               setPruneLoading(false);
             }

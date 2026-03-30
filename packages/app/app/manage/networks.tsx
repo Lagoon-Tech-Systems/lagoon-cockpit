@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/lib/api';
 import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -35,7 +36,7 @@ export default function NetworksScreen() {
       setNetworks(data.networks);
     } catch (err) {
       console.error('Failed to fetch networks:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to fetch networks');
+      Alert.alert('Error', sanitizeErrorMessage(err, 'Failed to fetch networks'));
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../../src/lib/api';
 import { useServerStore } from '../../src/stores/serverStore';
 import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
 
 interface DockerImage {
   id: string;
@@ -48,7 +49,7 @@ export default function ImagesScreen() {
       setImages(data.images);
     } catch (err) {
       console.error('Failed to fetch images:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to fetch images');
+      Alert.alert('Error', sanitizeErrorMessage(err, 'Failed to fetch images'));
     } finally {
       setLoading(false);
     }
@@ -81,7 +82,7 @@ export default function ImagesScreen() {
               Alert.alert('Prune Complete', `Reclaimed ${formatBytes(result.SpaceReclaimed)}`);
               await fetchImages();
             } catch (err) {
-              Alert.alert('Prune Failed', err instanceof Error ? err.message : 'Failed to prune images');
+              Alert.alert('Prune Failed', sanitizeErrorMessage(err, 'Failed to prune images'));
             } finally {
               setPruneLoading(false);
             }
@@ -107,7 +108,7 @@ export default function ImagesScreen() {
               await apiFetch(`/api/images/${image.id}`, { method: 'DELETE' });
               await fetchImages();
             } catch (err) {
-              Alert.alert('Delete Failed', err instanceof Error ? err.message : 'Failed to delete image');
+              Alert.alert('Delete Failed', sanitizeErrorMessage(err, 'Failed to delete image'));
             } finally {
               setDeleteLoading(null);
             }

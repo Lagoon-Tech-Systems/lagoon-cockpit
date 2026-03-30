@@ -35,9 +35,6 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'Push Notifications', description: 'Manage mobile push alert preferences', icon: 'phone-portrait', iconColor: COLORS.teal, route: '/manage/notifications', section: 'monitoring' },
   { label: 'Webhooks', description: 'Fire events to Slack/Discord/n8n', icon: 'link', iconColor: COLORS.indigo, route: '/manage/webhooks', adminOnly: true, section: 'monitoring' },
   { label: 'Integrations', description: 'Connect external monitoring sources', icon: 'git-network', iconColor: COLORS.indigo, route: '/manage/integrations', adminOnly: true, section: 'monitoring', feature: 'integrations_basic' },
-  /* Pro Features */
-  { label: 'Incidents', description: 'Declare and manage incidents', icon: 'warning', iconColor: COLORS.red, route: '/manage/incidents', section: 'monitoring', feature: 'incidents' },
-  { label: 'Auto-Remediation', description: 'Self-healing rules and history', icon: 'flash', iconColor: COLORS.orange, route: '/manage/remediation', section: 'monitoring', feature: 'remediation' },
   /* Operations */
   { label: 'Event Log', description: 'Windows Event Log viewer', icon: 'document-text', iconColor: COLORS.orange, route: '/manage/eventlog', section: 'operations', windowsOnly: true },
   { label: 'Activity Log', description: 'Who did what and when', icon: 'list', iconColor: COLORS.textSecondary, route: '/manage/activity', section: 'operations' },

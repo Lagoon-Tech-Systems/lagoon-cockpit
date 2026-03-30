@@ -1,5 +1,6 @@
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, StyleSheet } from 'react-native';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withDelay, withTiming, Easing } from 'react-native-reanimated';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useServerStore } from '../../src/stores/serverStore';
 import { useDashboardStore } from '../../src/stores/dashboardStore';
@@ -12,6 +13,7 @@ import { GlassCard } from '../../src/components/ui/GlassCard';
 import { TactileCard } from '../../src/components/ui/TactileCard';
 import { StatusDot } from '../../src/components/ui/StatusDot';
 import Skeleton from '../../src/components/Skeleton';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
 
 /* ─── Helpers ─── */
 function formatBytes(bytes: number): string {
@@ -167,31 +169,21 @@ function SkeletonGaugeRow() {
 
 /* ─── Animated Section Wrapper ─── */
 function FadeSlideIn({ delay, children }: { delay: number; children: React.ReactNode }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
 
   useEffect(() => {
-    const anim = Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 400,
-        delay,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 400,
-        delay,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]);
-    anim.start();
-  }, [opacity, translateY, delay]);
+    opacity.value = withDelay(delay, withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }));
+    translateY.value = withDelay(delay, withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+    <Animated.View style={animStyle}>
       {children}
     </Animated.View>
   );
@@ -230,7 +222,7 @@ export default function OverviewScreen() {
       }
     } catch (err) {
       console.error('[COCKPIT] Failed to fetch overview:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      setError(sanitizeErrorMessage(err, 'Failed to load dashboard'));
     }
   }, [setOverview, setContainers, setStacks]);
 

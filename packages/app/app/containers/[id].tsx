@@ -8,6 +8,7 @@ import { useServerStore } from '../../src/stores/serverStore';
 import LogViewer from '../../src/components/LogViewer';
 import ActionSheet from '../../src/components/ActionSheet';
 import { COLORS } from '../../src/theme/tokens';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -95,7 +96,7 @@ export default function ContainerDetailScreen() {
       setStats(data.stats);
     } catch (err) {
       console.error('Failed to fetch container:', err);
-      setFetchError(err instanceof Error ? err.message : 'Failed to load container');
+      setFetchError(sanitizeErrorMessage(err, 'Failed to load container'));
     }
   }, [id]);
 
@@ -142,7 +143,7 @@ export default function ContainerDetailScreen() {
       }
       await fetchDetail();
     } catch (err) {
-      Alert.alert('Failed', err instanceof Error ? err.message : 'Action failed');
+      Alert.alert('Failed', sanitizeErrorMessage(err, 'Action failed'));
     } finally {
       setActionLoading(false);
     }
@@ -158,7 +159,7 @@ export default function ContainerDetailScreen() {
       });
       setExecOutput(`$ ${execCmd}\n${result.output}\n[exit: ${result.exitCode}]`);
     } catch (err) {
-      setExecOutput(`$ ${execCmd}\nError: ${err instanceof Error ? err.message : 'Failed'}`);
+      setExecOutput(`$ ${execCmd}\nError: ${sanitizeErrorMessage(err, 'Failed')}`);
     } finally {
       setExecLoading(false);
     }

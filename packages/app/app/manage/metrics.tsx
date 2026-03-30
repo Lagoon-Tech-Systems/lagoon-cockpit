@@ -12,6 +12,7 @@ import { Stack } from 'expo-router';
 import { apiFetch } from '../../src/lib/api';
 import Sparkline from '../../src/components/Sparkline';
 import { COLORS, RADIUS, SPACING } from '../../src/theme/tokens';
+import { sanitizeErrorMessage } from '../../src/lib/errors';
 
 /* ---------- Types ---------- */
 
@@ -72,7 +73,7 @@ export default function MetricsHistoryScreen() {
       );
       setData(res);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load metrics');
+      setError(sanitizeErrorMessage(err, 'Failed to load metrics'));
     } finally {
       setLoading(false);
       setRefreshing(false);
