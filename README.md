@@ -28,6 +28,14 @@ Portainer and Rancher are powerful, but they're desktop web UIs. When your serve
 
 ---
 
+## Demo
+
+<div align="center">
+<img src="docs/demo.gif" alt="Lagoon Cockpit Demo" width="300">
+</div>
+
+---
+
 ## Screenshots
 
 <div align="center">
