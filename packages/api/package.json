@@ -12,7 +12,7 @@
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.8.0",
     "dotenv": "^17.3.1",
     "expo-server-sdk": "^3.13.0",
     "express": "^4.21.0",
