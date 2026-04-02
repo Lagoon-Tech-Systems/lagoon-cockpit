@@ -289,6 +289,35 @@ Cockpit exports 37+ metrics at `/metrics` for Prometheus scraping:
 
 ---
 
+## Install
+
+### PWA (Any Device)
+
+Visit **[app.lagoontechsystems.com](https://app.lagoontechsystems.com)** in your mobile browser.
+
+- **Android**: Tap the menu → **"Add to Home Screen"**
+- **iOS**: Tap the share button → **"Add to Home Screen"**
+- **Desktop**: Click the install icon in the address bar
+
+Works offline after first load. No app store needed.
+
+### Android APK
+
+Download the latest APK from [GitHub Releases](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/releases/latest).
+
+```bash
+# Verify checksum
+sha256sum -c CHECKSUMS.sha256
+```
+
+> You may need to enable "Install from unknown sources" in your Android settings.
+
+### Docker (Self-Host the API)
+
+See [Quick Start](#quick-start) above.
+
+---
+
 ## Contributing
 
 We welcome contributions. Please read our [Security Policy](SECURITY.md) before reporting vulnerabilities.

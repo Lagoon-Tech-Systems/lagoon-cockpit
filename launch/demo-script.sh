@@ -121,6 +121,6 @@ pause
 echo -e "${BOLD}${GREEN}"
 echo "  ╔═══════════════════════════════════════════════╗"
 echo "  ║  All data served from a single 22MB container ║"
-echo "  ║  github.com/Bigabou007-dev/lagoon-cockpit     ║"
+echo "  ║  github.com/Lagoon-Tech-Systems/lagoon-cockpit ║"
 echo "  ╚═══════════════════════════════════════════════╝"
 echo -e "${NC}"

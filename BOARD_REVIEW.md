@@ -122,5 +122,5 @@ All three technical reviewers (Piccolo, Goku, Bulma) independently flagged the s
 | Backups | Daily 3 AM cron — last: 2026-03-27 |
 | Sentinel | Monitoring both endpoints + SSL + container |
 | CI/CD | GitHub Actions: audit + test + secret scan |
-| GitHub | https://github.com/Bigabou007-dev/lagoon-cockpit |
+| GitHub | https://github.com/Lagoon-Tech-Systems/lagoon-cockpit |
 | Dev.to | Published, updated to v3 |
