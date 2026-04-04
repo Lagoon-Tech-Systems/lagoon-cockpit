@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.0](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/compare/v2.0.0...v2.1.0) (2026-04-04)
+
+
+### Features
+
+* add app screenshots, fix ContainerCard web nesting, update launch content ([5e8d8e9](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/5e8d8e9b7236e6286cc8f179616e86c7cfae3244))
+* add demo GIF to README ([9ae1c45](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/9ae1c45bf583e87c9803da69c5e0be41fe095947))
+* add Pro module UI screens and API extensions ([8eccbe6](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/8eccbe697a18549095c71f425bf9994a8b73b812))
+* **app:** add PWA support + web deployment config ([02c473e](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/02c473e2df49b34c0e70983c7ea617edcfe83ddd))
+
+
+### Bug Fixes
+
+* correct license from MIT to AGPL-3.0 in launch Dev.to article ([c90700e](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/c90700e79b84d589ed20b0079be941e709a6216b))
+* correct license from MIT to AGPL-3.0 in launch LinkedIn post ([c10b491](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/c10b491c561778abc1c2b2533c08d2891842761c))
+* correct license to AGPL-3.0, redact real stack names from content Dev.to article ([5b36924](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/5b3692430f56363c96951b72a4db9cb110eafa0a))
+* correct license to AGPL-3.0, remove MT5 trading reference from content LinkedIn post ([e27783c](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/e27783cf585816e46cc2532ee3892c33882cc296))
+
 ## [2.0.0](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/compare/v1.0.0...v2.0.0) (2026-03-30)
 
 
