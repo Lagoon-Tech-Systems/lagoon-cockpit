@@ -1,7 +1,10 @@
+import logging
+
 import requests
 from config import MT5_BRIDGE_URL, MT5_BRIDGE_API_KEY
 
 TIMEOUT = 5
+log = logging.getLogger("cockpit.mt5")
 
 
 def _bridge_get(path):
@@ -14,8 +17,9 @@ def _bridge_get(path):
         return {"error": "MT5 Bridge unreachable"}, 503
     except requests.Timeout:
         return {"error": "MT5 Bridge timed out"}, 504
-    except Exception as e:
-        return {"error": str(e)}, 500
+    except Exception:
+        log.exception("[MT5] bridge call failed: %s", path)
+        return {"error": "MT5 Bridge error"}, 500
 
 
 def get_health():

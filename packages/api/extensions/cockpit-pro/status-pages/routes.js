@@ -686,6 +686,11 @@ router.post("/:pageId/subscribers", requireRole("admin", "operator"), async (req
       return res.status(400).json({ error: "email or webhook_url is required" });
     }
 
+    // RFC 5321 caps email at 254 chars; bound input length before the
+    // polynomial regex to prevent ReDoS on crafted long inputs.
+    if (email && (typeof email !== "string" || email.length > 254)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Invalid email format" });
     }

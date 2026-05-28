@@ -665,6 +665,11 @@ router.post("/acs", (req, res) => {
     if (!SAMLResponse || typeof SAMLResponse !== "string") {
       return res.status(400).json({ error: "SAMLResponse is required" });
     }
+    // Cap base64 input — real SAML responses are <50KB; this bounds the
+    // polynomial regex passes below and rejects ReDoS payloads early.
+    if (SAMLResponse.length > 100_000) {
+      return res.status(413).json({ error: "SAMLResponse too large" });
+    }
 
     // Decode base64 SAML response
     let xml;
@@ -672,6 +677,9 @@ router.post("/acs", (req, res) => {
       xml = Buffer.from(SAMLResponse, "base64").toString("utf-8");
     } catch {
       return res.status(400).json({ error: "Invalid SAMLResponse encoding" });
+    }
+    if (xml.length > 200_000) {
+      return res.status(413).json({ error: "SAMLResponse too large" });
     }
 
     // Strip XML comments before any extraction (prevents comment injection)

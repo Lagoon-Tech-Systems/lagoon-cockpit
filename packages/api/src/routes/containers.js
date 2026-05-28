@@ -50,7 +50,15 @@ router.get("/api/containers/:id/logs", requireAuth, validateContainerId, async (
 router.get("/api/containers/:id/logs/search", requireAuth, validateContainerId, async (req, res) => {
   try {
     const { q, regex, context = "2" } = req.query;
+    // Reject duplicate query params (express parses them as arrays) — prevents type
+    // confusion that would bypass the length/ReDoS heuristic below.
+    if (typeof q !== "string") return res.status(400).json({ error: "q must be a single string" });
+    if (regex !== undefined && typeof regex !== "string")
+      return res.status(400).json({ error: "regex must be a single string" });
+    if (typeof context !== "string")
+      return res.status(400).json({ error: "context must be a single string" });
     if (!q) return res.status(400).json({ error: "q (search query) required" });
+    if (q.length > 1000) return res.status(400).json({ error: "Query too long (max 1000 chars)" });
 
     const lines = await containers.getContainerLogs(req.params.id, { tail: 1000 });
     const contextLines = Math.min(parseInt(context, 10) || 2, 5);

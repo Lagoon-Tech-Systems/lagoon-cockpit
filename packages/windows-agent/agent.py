@@ -4,11 +4,31 @@ Standalone REST API for managing Windows Server infrastructure.
 Compatible with the Lagoon Cockpit mobile app (multi-server profiles).
 """
 
+import logging
 import os
 import time
 import threading
+import traceback
 from flask import Flask, request, jsonify, Response, g
 from config import SERVER_NAME, PORT
+
+log = logging.getLogger("cockpit.agent")
+
+
+def safe_error(exc, default_msg="Operation failed"):
+    """Log full exception server-side, return generic message for client."""
+    log.error("[AGENT] %s: %s\n%s", default_msg, exc, traceback.format_exc())
+    return default_msg
+
+
+def sanitize_upstream(data):
+    """Strip raw exception messages from upstream JSON before forwarding."""
+    if isinstance(data, dict) and "error" in data and isinstance(data["error"], str):
+        # Allow well-known short messages, mask anything that looks like a traceback.
+        msg = data["error"]
+        if len(msg) > 120 or "Traceback" in msg or "\n" in msg:
+            data = {**data, "error": "Upstream service error"}
+    return data
 
 from auth.keys import authenticate_with_key
 from auth.jwt_auth import (
@@ -56,6 +76,14 @@ def set_security_headers(response):
     response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     return response
+
+
+@app.errorhandler(Exception)
+def handle_unexpected(exc):
+    """Catch-all: never leak stack traces to clients."""
+    log.error("[AGENT] unhandled exception on %s: %s\n%s",
+              request.path, exc, traceback.format_exc())
+    return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/health")
@@ -178,7 +206,7 @@ def service_start(name):
         start_service(name)
         return jsonify({"ok": True, "action": "start", "service": name})
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": safe_error(e, "Service start failed")}), 400
 
 
 @app.route("/api/services/<name>/stop", methods=["POST"])
@@ -191,7 +219,7 @@ def service_stop(name):
         stop_service(name)
         return jsonify({"ok": True, "action": "stop", "service": name})
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": safe_error(e, "Service stop failed")}), 400
 
 
 @app.route("/api/services/<name>/restart", methods=["POST"])
@@ -204,7 +232,7 @@ def service_restart(name):
         restart_service(name)
         return jsonify({"ok": True, "action": "restart", "service": name})
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": safe_error(e, "Service restart failed")}), 400
 
 
 # ── Processes ──────────────────────────────────────────────────────────────
@@ -225,7 +253,7 @@ def process_kill(pid):
         result = kill_process(pid)
         return jsonify({"ok": True, **result})
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": safe_error(e, "Process kill failed")}), 400
 
 
 # ── MT5 Bridge Proxy ──────────────────────────────────────────────────────
@@ -234,21 +262,21 @@ def process_kill(pid):
 @require_auth
 def mt5_health_route():
     data, status = mt5_health()
-    return jsonify(data), status
+    return jsonify(sanitize_upstream(data)), status
 
 
 @app.route("/api/mt5/account")
 @require_auth
 def mt5_account_route():
     data, status = mt5_account()
-    return jsonify(data), status
+    return jsonify(sanitize_upstream(data)), status
 
 
 @app.route("/api/mt5/positions")
 @require_auth
 def mt5_positions_route():
     data, status = mt5_positions()
-    return jsonify(data), status
+    return jsonify(sanitize_upstream(data)), status
 
 
 # ── Event Log ──────────────────────────────────────────────────────────────

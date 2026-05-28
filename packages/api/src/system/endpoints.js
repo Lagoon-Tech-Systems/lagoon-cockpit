@@ -9,12 +9,17 @@ const https = require("https");
  * @param {number} timeout - Timeout in ms
  * @returns {Promise<object>}
  */
+// When STRICT_TLS=true, endpoint probes verify peer certificates. Default is
+// permissive so internal/self-signed monitoring targets keep working — flip
+// the env flag once all probed endpoints have trusted certs.
+const STRICT_TLS = process.env.STRICT_TLS === "true";
+
 function probeEndpoint(name, url, expectedStatus = 200, timeout = 15000) {
   return new Promise((resolve) => {
     const startTime = Date.now();
     const client = url.startsWith("https") ? https : http;
 
-    const req = client.get(url, { timeout, rejectUnauthorized: false }, (res) => {
+    const req = client.get(url, { timeout, rejectUnauthorized: STRICT_TLS }, (res) => {
       // Consume response body
       res.resume();
       res.on("end", () => {
