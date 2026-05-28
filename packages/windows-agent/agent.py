@@ -21,14 +21,7 @@ def safe_error(exc, default_msg="Operation failed"):
     return default_msg
 
 
-def sanitize_upstream(data):
-    """Strip raw exception messages from upstream JSON before forwarding."""
-    if isinstance(data, dict) and "error" in data and isinstance(data["error"], str):
-        # Allow well-known short messages, mask anything that looks like a traceback.
-        msg = data["error"]
-        if len(msg) > 120 or "Traceback" in msg or "\n" in msg:
-            data = {**data, "error": "Upstream service error"}
-    return data
+from sanitize import sanitize_upstream  # noqa: F401  (re-export for back-compat)
 
 from auth.keys import authenticate_with_key
 from auth.jwt_auth import (

@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+
+- **api:** type-check `q`/`regex`/`context` on `/api/containers/:id/logs/search` so duplicate query params cannot bypass the ReDoS heuristic (closes CodeQL #99).
+- **api:** cap `SAMLResponse` at 100KB base64 / 200KB decoded XML on the SSO ACS endpoint before the comment-strip regex runs, bounding polynomial regex work (closes CodeQL #14).
+- **api:** length-check email at RFC 5321 max (254) before the subscriber email regex (closes CodeQL #15).
+- **api:** endpoint-probe TLS now validates peer certificates by default; set `STRICT_TLS=false` to opt into the previous permissive behavior (closes CodeQL #26, posture hardening per board review on PR #48).
+- **windows-agent:** add `safe_error()` helper and `@app.errorhandler(Exception)` global catch so service/process/MT5 routes never leak Python tracebacks (closes 11× CodeQL py/stack-trace-exposure).
+- **windows-agent:** `sanitize_upstream()` now uses an explicit allowlist (`MT5 Bridge unreachable`, `MT5 Bridge timed out`, `MT5 Bridge error`); any other upstream `error` field is replaced with a generic message (closes the short-string-evasion gap raised by the board review on PR #48).
+- **api:** bump `uuid` pin to `^13.0.1` (closes Dependabot GHSA-w5hq-g745-h8pq for the direct dependency; deep dev-only transitives via `@expo/ngrok` and `xcode` remain on legacy versions and are not on a reachable path).
+- **triage:** 84 CodeQL warnings were dismissed with written reasons that link back to `SECURITY-TRIAGE.md`. The ledger documents the `globalLimiter` floor, the SAML signature-verification security boundary, and the API-key-fingerprint-not-password-hash architecture so future contributors can re-evaluate the rationale rather than read silent suppressions.
+
+### Tests
+
+- **api:** new `__tests__/codeql-guards.test.js` locks the type-check, size-cap, email-cap, and STRICT_TLS guards against silent removal.
+- **windows-agent:** new `tests/test_sanitize_upstream.py` covers the allowlist behavior (short `ValueError` and `pymysql.OperationalError`-style messages with embedded IPs/usernames are masked).
+
+### Docs
+
+- New `SECURITY-TRIAGE.md` ledger.
+- Operations entry for `lagoon-cockpit` added to the internal `lts-pre-deploy` matrix, documenting the canonical `packages/api/`-rooted compose layering and the known root-`docker-compose.yml` / `scripts/deploy.sh` drift.
+
 ## [2.0.0](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/compare/v1.0.0...v2.0.0) (2026-03-30)
 
 
