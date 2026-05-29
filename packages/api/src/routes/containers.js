@@ -55,8 +55,7 @@ router.get("/api/containers/:id/logs/search", requireAuth, validateContainerId, 
     if (typeof q !== "string") return res.status(400).json({ error: "q must be a single string" });
     if (regex !== undefined && typeof regex !== "string")
       return res.status(400).json({ error: "regex must be a single string" });
-    if (typeof context !== "string")
-      return res.status(400).json({ error: "context must be a single string" });
+    if (typeof context !== "string") return res.status(400).json({ error: "context must be a single string" });
     if (!q) return res.status(400).json({ error: "q (search query) required" });
     if (q.length > 1000) return res.status(400).json({ error: "Query too long (max 1000 chars)" });
 

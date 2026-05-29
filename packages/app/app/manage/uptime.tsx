@@ -399,7 +399,6 @@ const styles = StyleSheet.create({
   targetText: {
     flex: 1,
     color: COLORS.textSecondary,
-    fontSize: 12,
     ...FONT.mono,
   },
   metaRow: {
