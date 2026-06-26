@@ -511,6 +511,76 @@ describe("GET /api/metrics/history: legacy backward-compat", () => {
   });
 });
 
+describe("GET /api/metrics/history: legacy hours>48 summary covers served window", () => {
+  // Regression guard: before the fix, ?hours=168 fetched history from hourly rollups
+  // but computed summary via getHistorySummary() which only reads the 48h raw table.
+  // A caller requesting ?hours=168 got history spanning 7 days but a summary covering
+  // only the last 48h — a silent inconsistency. This test seeds a bucket at ~-100h
+  // (outside the 48h raw window) and asserts the summary reflects it.
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  // Hourly bucket 100 hours ago — outside 48h raw retention, inside 168h window.
+  const bucket100h = Math.floor((nowSec - 100 * 3600) / 3600) * 3600;
+
+  beforeAll(() => {
+    // cpu_max=88 is the sentinel value; also seed a distinctive cpu_min=3 to verify min.
+    database
+      .prepare(
+        `INSERT OR REPLACE INTO metrics_rollup_hourly
+           (bucket_start, cpu_min, cpu_max, cpu_avg, memory_min, memory_max, memory_avg,
+            disk_min, disk_max, disk_avg, load_min, load_max, load_avg,
+            container_total_min, container_total_max, container_total_avg,
+            container_running_min, container_running_max, container_running_avg, sample_count)
+         VALUES (?, 3, 88, 45, 10, 20, 15, 30, 40, 35, 0, 2, 1, 2, 4, 3, 1, 3, 2, 5)`
+      )
+      .run(bucket100h);
+  });
+
+  test("hours=168 summary.cpu_max >= 88 (covers -100h bucket, not just 48h raw)", async () => {
+    setEdition("pro", 365);
+    const res = await auth(request(app).get("/api/metrics/history?hours=168"));
+    expect(res.status).toBe(200);
+    const s = res.body.summary;
+    expect(s).not.toBeNull();
+    // The -100h bucket has cpu_max=88; the summary must reflect the full 168h window.
+    expect(s.cpu_max).toBeGreaterThanOrEqual(88);
+  });
+
+  test("hours=168 summary has the complete legacy getHistorySummary key set (unchanged)", async () => {
+    setEdition("pro", 365);
+    const res = await auth(request(app).get("/api/metrics/history?hours=168"));
+    expect(res.status).toBe(200);
+    const s = res.body.summary;
+    // All keys that getHistorySummary returns must be present — both the original legacy
+    // keys and the Task 4.3 additive widening keys.
+    const EXPECTED_KEYS = [
+      "data_points",
+      "cpu_avg", "cpu_max", "cpu_min",
+      "memory_avg", "memory_max", "memory_min",
+      "disk_avg", "disk_max", "disk_min",
+      "load_avg", "load_max", "load_min",
+      "container_total_avg", "container_total_max", "container_total_min",
+      "container_running_avg", "container_running_max", "container_running_min",
+    ];
+    expect(s).toEqual(expect.objectContaining(
+      Object.fromEntries(EXPECTED_KEYS.map((k) => [k, expect.anything()]))
+    ));
+  });
+
+  test("hours<=48 summary is still served via getHistorySummary (unchanged code path)", async () => {
+    setEdition("pro", 365);
+    const res = await auth(request(app).get("/api/metrics/history?hours=24"));
+    expect(res.status).toBe(200);
+    // The <=48h branch is untouched; just verify the shape is still present.
+    const s = res.body.summary;
+    for (const k of ["data_points", "cpu_avg", "cpu_max", "cpu_min",
+                     "memory_avg", "memory_max", "disk_avg", "disk_max",
+                     "load_avg", "load_max"]) {
+      expect(s).toHaveProperty(k);
+    }
+  });
+});
+
 describe("GET /api/metrics/history: MAX_POINTS auto-promote", () => {
   test("a hugely zoomed raw from/to promotes off raw to a coarser tier", async () => {
     setEdition("enterprise"); // 730d cap, no metricsRetentionDays key

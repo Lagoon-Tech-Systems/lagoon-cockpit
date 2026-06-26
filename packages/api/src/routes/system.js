@@ -139,6 +139,43 @@ function hourlyToLegacyRow(b) {
   };
 }
 
+/**
+ * Aggregate hourly rollup buckets into a summary object whose keys are
+ * IDENTICAL to those returned by metricsHistory.getHistorySummary() —
+ * used by the legacy ?hours>48 path so its summary covers the full served
+ * window instead of the 48h raw table.
+ */
+function bucketsToLegacySummary(buckets) {
+  if (!buckets || buckets.length === 0) return null;
+  const totalSamples = buckets.reduce((s, b) => s + (b.sample_count || 1), 0);
+  function wAvg(field) {
+    if (totalSamples === 0) return null;
+    const sum = buckets.reduce((s, b) => s + (b[field] ?? 0) * (b.sample_count || 1), 0);
+    return Math.round(sum / totalSamples * 100) / 100;
+  }
+  return {
+    data_points: totalSamples,
+    cpu_avg: wAvg("cpu_avg"),
+    cpu_max: Math.max(...buckets.map((b) => b.cpu_max ?? b.cpu_avg)),
+    cpu_min: Math.min(...buckets.map((b) => b.cpu_min ?? b.cpu_avg)),
+    memory_avg: wAvg("memory_avg"),
+    memory_max: Math.max(...buckets.map((b) => b.memory_max ?? b.memory_avg)),
+    memory_min: Math.min(...buckets.map((b) => b.memory_min ?? b.memory_avg)),
+    disk_avg: wAvg("disk_avg"),
+    disk_max: Math.max(...buckets.map((b) => b.disk_max ?? b.disk_avg)),
+    disk_min: Math.min(...buckets.map((b) => b.disk_min ?? b.disk_avg)),
+    load_avg: wAvg("load_avg"),
+    load_max: Math.max(...buckets.map((b) => b.load_max ?? b.load_avg)),
+    load_min: Math.min(...buckets.map((b) => b.load_min ?? b.load_avg)),
+    container_total_avg: wAvg("container_total_avg"),
+    container_total_max: Math.max(...buckets.map((b) => b.container_total_max ?? b.container_total_avg ?? 0)),
+    container_total_min: Math.min(...buckets.map((b) => b.container_total_min ?? b.container_total_avg ?? 0)),
+    container_running_avg: wAvg("container_running_avg"),
+    container_running_max: Math.max(...buckets.map((b) => b.container_running_max ?? b.container_running_avg ?? 0)),
+    container_running_min: Math.min(...buckets.map((b) => b.container_running_min ?? b.container_running_avg ?? 0)),
+  };
+}
+
 router.get("/api/metrics/history", requireAuth, (req, res) => {
   const parsed = parseRequest(req.query);
   if (parsed.error) {
@@ -158,12 +195,15 @@ router.get("/api/metrics/history", requireAuth, (req, res) => {
       });
     }
     // >48h: serve history from hourly rollups mapped to raw field names.
+    // Summary is aggregated from the same hourly buckets so it covers the full
+    // served window — NOT via getHistorySummary which reads the 48h raw table.
     const nowSec = Math.floor(Date.now() / 1000);
     const fromEpoch = nowSec - servedHours * 3600;
     const buckets = metricsHistory.getTrendBuckets({ tier: "hourly", fromEpoch, toEpoch: nowSec });
+    const legacySummary = bucketsToLegacySummary(buckets);
     return res.json({
       history: buckets.map(hourlyToLegacyRow),
-      summary: metricsHistory.getHistorySummary(servedHours),
+      summary: legacySummary,
     });
   }
 
