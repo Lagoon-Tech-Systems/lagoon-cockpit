@@ -112,4 +112,69 @@ function setState(key, value) {
   ).run(key, value);
 }
 
-module.exports = { init, recordMetrics, getHistory, getHistorySummary, getState, setState };
+// SQL fragment shared by tick + backfill. Folds raw rows whose hour bucket is
+// in [lowBound, upperExclusive) into metrics_rollup_hourly. bucket_start is the
+// canonical UTC-epoch-seconds conversion — NEVER bare unixepoch().
+const HOURLY_UPSERT_SQL = `
+  INSERT INTO metrics_rollup_hourly
+    (bucket_start, cpu_min, cpu_max, cpu_avg, memory_min, memory_max, memory_avg,
+     disk_min, disk_max, disk_avg, load_min, load_max, load_avg,
+     container_total_min, container_total_max, container_total_avg,
+     container_running_min, container_running_max, container_running_avg, sample_count)
+  SELECT CAST(strftime('%s', created_at) AS INTEGER) / 3600 * 3600 AS bucket_start,
+         MIN(cpu_percent), MAX(cpu_percent), ROUND(AVG(cpu_percent), 2),
+         MIN(memory_percent), MAX(memory_percent), ROUND(AVG(memory_percent), 2),
+         MIN(disk_percent), MAX(disk_percent), ROUND(AVG(disk_percent), 2),
+         MIN(load_1), MAX(load_1), ROUND(AVG(load_1), 2),
+         MIN(container_total), MAX(container_total), ROUND(AVG(container_total), 2),
+         MIN(container_running), MAX(container_running), ROUND(AVG(container_running), 2),
+         COUNT(cpu_percent)
+  FROM metrics_history
+  WHERE created_at >= ? AND created_at < ?
+  GROUP BY bucket_start
+  HAVING COUNT(cpu_percent) > 0
+  ON CONFLICT(bucket_start) DO UPDATE SET
+    cpu_min=excluded.cpu_min, cpu_max=excluded.cpu_max, cpu_avg=excluded.cpu_avg,
+    memory_min=excluded.memory_min, memory_max=excluded.memory_max, memory_avg=excluded.memory_avg,
+    disk_min=excluded.disk_min, disk_max=excluded.disk_max, disk_avg=excluded.disk_avg,
+    load_min=excluded.load_min, load_max=excluded.load_max, load_avg=excluded.load_avg,
+    container_total_min=excluded.container_total_min, container_total_max=excluded.container_total_max,
+    container_total_avg=excluded.container_total_avg,
+    container_running_min=excluded.container_running_min, container_running_max=excluded.container_running_max,
+    container_running_avg=excluded.container_running_avg,
+    sample_count=excluded.sample_count;
+`;
+
+/** Format a UTC epoch-seconds value as a UTC-naive 'YYYY-MM-DD HH:MM:SS' string for created_at comparisons. */
+function epochToCreatedAt(epochSec) {
+  return new Date(epochSec * 1000).toISOString().slice(0, 19).replace("T", " ");
+}
+
+/**
+ * Fold COMPLETED raw buckets into hourly (and, in Task 2.3, hourly into daily).
+ * Idempotent UPSERT. Re-rolls from (watermark - 1 hour) to absorb late raw,
+ * recomputing the boundary bucket. The current incomplete hour is never finalized.
+ */
+function rollupTick(database) {
+  if (!database) return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const lastCompleteHour = Math.floor(nowSec / 3600) * 3600; // exclusive upper bound (current hour excluded)
+
+  const wmRaw = getState("rollup_hourly_watermark");
+  const wm = wmRaw !== null ? parseInt(wmRaw, 10) : 0;
+  const hourlyLow = wm > 0 ? wm - 3600 : 0; // slack: re-roll the boundary bucket
+
+  const run = database.transaction(() => {
+    database
+      .prepare(HOURLY_UPSERT_SQL)
+      .run(hourlyLow > 0 ? epochToCreatedAt(hourlyLow) : "0000-00-00 00:00:00", epochToCreatedAt(lastCompleteHour));
+
+    const maxHourly = database
+      .prepare("SELECT MAX(bucket_start) AS m FROM metrics_rollup_hourly WHERE bucket_start < ?")
+      .get(lastCompleteHour);
+    if (maxHourly && maxHourly.m !== null) setState("rollup_hourly_watermark", String(maxHourly.m));
+  });
+  run();
+}
+
+module.exports = { init, recordMetrics, getHistory, getHistorySummary, getState, setState, rollupTick };

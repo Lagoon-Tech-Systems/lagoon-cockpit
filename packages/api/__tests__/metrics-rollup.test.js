@@ -65,6 +65,92 @@ afterEach(() => {
   }
 });
 
+/** Insert a raw metrics_history row with an explicit UTC-naive created_at. */
+function insertRaw(database, createdAt, m) {
+  database
+    .prepare(
+      `INSERT INTO metrics_history
+       (cpu_percent, memory_percent, disk_percent, load_1, container_total, container_running, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      m.cpu ?? null,
+      m.mem ?? null,
+      m.disk ?? null,
+      m.load ?? null,
+      m.ctotal ?? null,
+      m.crunning ?? null,
+      createdAt,
+    );
+}
+
+describe("rollupTick raw -> hourly", () => {
+  test("MIN/MAX/AVG match known input; sample_count = COUNT(cpu_percent); bucket_start epoch is correct", () => {
+    // Three samples inside the 2026-06-01 10:00 UTC hour (epoch 1748772000).
+    insertRaw(db, "2026-06-01 10:05:00", { cpu: 10, mem: 40, disk: 50, load: 0.1, ctotal: 8, crunning: 6 });
+    insertRaw(db, "2026-06-01 10:25:00", { cpu: 20, mem: 50, disk: 50, load: 0.3, ctotal: 8, crunning: 7 });
+    insertRaw(db, "2026-06-01 10:55:00", { cpu: 30, mem: 60, disk: 51, load: 0.2, ctotal: 9, crunning: 8 });
+
+    metricsHistory.rollupTick(db);
+
+    const expectedBucket = Math.floor(Date.parse("2026-06-01T10:00:00Z") / 1000); // 1748772000
+    const row = db.prepare("SELECT * FROM metrics_rollup_hourly WHERE bucket_start = ?").get(expectedBucket);
+    expect(row).toBeTruthy();
+    expect(row.bucket_start).toBe(expectedBucket);
+    expect(row.cpu_min).toBe(10);
+    expect(row.cpu_max).toBe(30);
+    expect(row.cpu_avg).toBe(20); // ROUND(AVG(10,20,30),2)
+    expect(row.memory_min).toBe(40);
+    expect(row.memory_max).toBe(60);
+    expect(row.memory_avg).toBe(50);
+    expect(row.disk_min).toBe(50);
+    expect(row.disk_max).toBe(51);
+    expect(row.container_total_min).toBe(8);
+    expect(row.container_total_max).toBe(9);
+    expect(row.container_running_max).toBe(8);
+    expect(row.sample_count).toBe(3);
+  });
+
+  test("sample_count counts only non-null cpu_percent (NaN-coerced-null rows excluded)", () => {
+    insertRaw(db, "2026-06-01 11:05:00", { cpu: 12, mem: 40, disk: 50, load: 0.1, ctotal: 5, crunning: 5 });
+    insertRaw(db, "2026-06-01 11:35:00", { cpu: null, mem: 41, disk: 50, load: null, ctotal: 5, crunning: 5 });
+    metricsHistory.rollupTick(db);
+    const bucket = Math.floor(Date.parse("2026-06-01T11:00:00Z") / 1000);
+    const row = db.prepare("SELECT * FROM metrics_rollup_hourly WHERE bucket_start = ?").get(bucket);
+    expect(row.sample_count).toBe(1); // COUNT(cpu_percent), not COUNT(*)=2
+    expect(row.cpu_avg).toBe(12);
+  });
+
+  test("all-NULL cpu bucket is skipped (HAVING COUNT(cpu_percent) > 0)", () => {
+    insertRaw(db, "2026-06-01 12:05:00", { cpu: null, mem: null, disk: null, load: null, ctotal: null, crunning: null });
+    insertRaw(db, "2026-06-01 12:35:00", { cpu: null, mem: 30, disk: 40, load: 0.5, ctotal: 3, crunning: 3 });
+    metricsHistory.rollupTick(db);
+    const bucket = Math.floor(Date.parse("2026-06-01T12:00:00Z") / 1000);
+    const row = db.prepare("SELECT * FROM metrics_rollup_hourly WHERE bucket_start = ?").get(bucket);
+    expect(row).toBeUndefined();
+  });
+
+  test("idempotent — running rollupTick twice yields identical hourly rows", () => {
+    insertRaw(db, "2026-06-01 13:10:00", { cpu: 5, mem: 20, disk: 30, load: 0.1, ctotal: 2, crunning: 2 });
+    insertRaw(db, "2026-06-01 13:50:00", { cpu: 15, mem: 22, disk: 30, load: 0.2, ctotal: 2, crunning: 2 });
+    metricsHistory.rollupTick(db);
+    const first = db.prepare("SELECT * FROM metrics_rollup_hourly ORDER BY bucket_start").all();
+    metricsHistory.rollupTick(db);
+    const second = db.prepare("SELECT * FROM metrics_rollup_hourly ORDER BY bucket_start").all();
+    expect(second).toEqual(first);
+  });
+
+  test("the current incomplete hour is NOT finalized", () => {
+    const now = new Date();
+    const isoThisHour = now.toISOString().slice(0, 13).replace("T", " ") + ":30:00"; // YYYY-MM-DD HH:30:00 UTC
+    insertRaw(db, isoThisHour, { cpu: 99, mem: 99, disk: 99, load: 9, ctotal: 1, crunning: 1 });
+    metricsHistory.rollupTick(db);
+    const curBucket = Math.floor(Date.now() / 1000 / 3600) * 3600;
+    const row = db.prepare("SELECT * FROM metrics_rollup_hourly WHERE bucket_start = ?").get(curBucket);
+    expect(row).toBeUndefined();
+  });
+});
+
 describe("app_state helpers", () => {
   test("getState returns null for an absent key", () => {
     expect(metricsHistory.getState("nope")).toBeNull();
