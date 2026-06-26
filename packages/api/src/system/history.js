@@ -272,4 +272,32 @@ function getTrendBuckets({ tier, fromEpoch, toEpoch }) {
   return [];
 }
 
-module.exports = { init, recordMetrics, getHistory, getHistorySummary, getState, setState, rollupTick, getTrendBuckets };
+/**
+ * One-time backfill: roll ALL existing raw rows into hourly + daily before the
+ * raw retention window shrinks (168h -> 48h). Guarded by app_state.backfill_v1_done;
+ * idempotent — a second call is a no-op. Wrapped in a single transaction.
+ */
+function runBackfill(database) {
+  if (!database) return { done: false, rolled: false };
+  if (getState("backfill_v1_done") === "1") return { done: true, rolled: false };
+
+  const nowCreatedAt = epochToCreatedAt(Math.floor(Date.now() / 1000) + 3600); // inclusive of newest raw
+  const run = database.transaction(() => {
+    // raw -> hourly over the full window
+    database.prepare(HOURLY_UPSERT_SQL).run("0000-00-00 00:00:00", nowCreatedAt);
+    // hourly -> daily over the full epoch range
+    database.prepare(DAILY_UPSERT_SQL).run(0, Math.floor(Date.now() / 1000) + 86400);
+
+    // Seed watermarks so the first live rollupTick re-rolls only the boundary buckets.
+    const maxHourly = database.prepare("SELECT MAX(bucket_start) AS m FROM metrics_rollup_hourly").get();
+    if (maxHourly && maxHourly.m !== null) setState("rollup_hourly_watermark", String(maxHourly.m), database);
+    const maxDaily = database.prepare("SELECT MAX(bucket_start) AS m FROM metrics_rollup_daily").get();
+    if (maxDaily && maxDaily.m !== null) setState("rollup_daily_watermark", String(maxDaily.m), database);
+
+    setState("backfill_v1_done", "1", database);
+  });
+  run();
+  return { done: true, rolled: true };
+}
+
+module.exports = { init, recordMetrics, getHistory, getHistorySummary, getState, setState, rollupTick, getTrendBuckets, runBackfill };
