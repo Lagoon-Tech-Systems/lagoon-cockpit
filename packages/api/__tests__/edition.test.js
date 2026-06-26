@@ -123,3 +123,19 @@ describe("resolveRetentionDays", () => {
     expect(resolveRetentionDays({ name: "ce", limits: { metricsRetentionDays: NaN } })).toBe(30);
   });
 });
+
+describe("metricsRetentionDays cross-surface parity", () => {
+  const proSharedEdition = require("/home/bigabou/automation/projects/cockpit-pro/packages/shared/src/edition.js");
+
+  test("CE value matches across API and cockpit-pro shared", () => {
+    expect(CE_LIMITS.metricsRetentionDays).toBe(30);
+    expect(proSharedEdition.CE_LIMITS.metricsRetentionDays).toBe(30);
+    expect(proSharedEdition.CE_LIMITS.metricsRetentionDays).toBe(CE_LIMITS.metricsRetentionDays);
+  });
+
+  test("Pro value matches across API and cockpit-pro shared", () => {
+    expect(PRO_LIMITS.metricsRetentionDays).toBe(365);
+    expect(proSharedEdition.PRO_LIMITS.metricsRetentionDays).toBe(365);
+    expect(proSharedEdition.PRO_LIMITS.metricsRetentionDays).toBe(PRO_LIMITS.metricsRetentionDays);
+  });
+});
