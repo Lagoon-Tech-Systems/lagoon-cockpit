@@ -225,4 +225,51 @@ function rollupTick(database) {
   run();
 }
 
-module.exports = { init, recordMetrics, getHistory, getHistorySummary, getState, setState, rollupTick };
+const ROLLUP_SELECT_COLS = `bucket_start AS t, cpu_min, cpu_max, cpu_avg,
+  memory_min, memory_max, memory_avg, disk_min, disk_max, disk_avg,
+  load_min, load_max, load_avg,
+  container_total_min, container_total_max, container_total_avg,
+  container_running_min, container_running_max, container_running_avg, sample_count`;
+
+/**
+ * Read trend buckets for a tier within [fromEpoch, toEpoch) (UTC epoch seconds),
+ * ascending by t. Raw rows are mapped into the uniform bucket shape
+ * (min=max=avg=value, sample_count:1) so the chart layer is tier-agnostic.
+ */
+function getTrendBuckets({ tier, fromEpoch, toEpoch }) {
+  if (!db) return [];
+  if (tier === "hourly" || tier === "daily") {
+    const table = tier === "hourly" ? "metrics_rollup_hourly" : "metrics_rollup_daily";
+    return db
+      .prepare(
+        `SELECT ${ROLLUP_SELECT_COLS} FROM ${table}
+         WHERE bucket_start >= ? AND bucket_start < ? ORDER BY bucket_start ASC`,
+      )
+      .all(fromEpoch, toEpoch);
+  }
+  if (tier === "raw") {
+    const rows = db
+      .prepare(
+        `SELECT CAST(strftime('%s', created_at) AS INTEGER) AS t,
+                cpu_percent, memory_percent, disk_percent, load_1, container_total, container_running
+         FROM metrics_history
+         WHERE CAST(strftime('%s', created_at) AS INTEGER) >= ?
+           AND CAST(strftime('%s', created_at) AS INTEGER) < ?
+         ORDER BY created_at ASC`,
+      )
+      .all(fromEpoch, toEpoch);
+    return rows.map((r) => ({
+      t: r.t,
+      cpu_min: r.cpu_percent, cpu_max: r.cpu_percent, cpu_avg: r.cpu_percent,
+      memory_min: r.memory_percent, memory_max: r.memory_percent, memory_avg: r.memory_percent,
+      disk_min: r.disk_percent, disk_max: r.disk_percent, disk_avg: r.disk_percent,
+      load_min: r.load_1, load_max: r.load_1, load_avg: r.load_1,
+      container_total_min: r.container_total, container_total_max: r.container_total, container_total_avg: r.container_total,
+      container_running_min: r.container_running, container_running_max: r.container_running, container_running_avg: r.container_running,
+      sample_count: 1,
+    }));
+  }
+  return [];
+}
+
+module.exports = { init, recordMetrics, getHistory, getHistorySummary, getState, setState, rollupTick, getTrendBuckets };

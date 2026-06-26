@@ -199,6 +199,72 @@ describe("rollupTick hourly -> daily (sample-weighted avg)", () => {
   });
 });
 
+describe("getTrendBuckets reads", () => {
+  test("hourly tier returns bucket objects with t + full metric key set, ascending", () => {
+    insertRaw(db, "2026-06-01 10:05:00", { cpu: 10, mem: 40, disk: 50, load: 0.1, ctotal: 8, crunning: 6 });
+    insertRaw(db, "2026-06-01 11:05:00", { cpu: 20, mem: 50, disk: 50, load: 0.2, ctotal: 8, crunning: 7 });
+    metricsHistory.rollupTick(db);
+
+    const from = Math.floor(Date.parse("2026-06-01T00:00:00Z") / 1000);
+    const to = Math.floor(Date.parse("2026-06-02T00:00:00Z") / 1000);
+    const buckets = metricsHistory.getTrendBuckets({ tier: "hourly", fromEpoch: from, toEpoch: to });
+
+    expect(Array.isArray(buckets)).toBe(true);
+    expect(buckets.length).toBe(2);
+    expect(buckets[0].t).toBeLessThan(buckets[1].t);
+    const b = buckets[0];
+    for (const k of [
+      "t", "cpu_min", "cpu_max", "cpu_avg", "memory_min", "memory_max", "memory_avg",
+      "disk_min", "disk_max", "disk_avg", "load_min", "load_max", "load_avg",
+      "container_total_min", "container_total_max", "container_total_avg",
+      "container_running_min", "container_running_max", "container_running_avg", "sample_count",
+    ]) {
+      expect(b).toHaveProperty(k);
+    }
+    expect(b.cpu_avg).toBe(10);
+    expect(b.sample_count).toBe(1);
+  });
+
+  test("daily tier reads from metrics_rollup_daily", () => {
+    insertRaw(db, "2026-06-01 08:05:00", { cpu: 12, mem: 30, disk: 40, load: 0.1, ctotal: 2, crunning: 2 });
+    insertRaw(db, "2026-06-01 09:05:00", { cpu: 18, mem: 32, disk: 40, load: 0.2, ctotal: 2, crunning: 2 });
+    metricsHistory.rollupTick(db);
+    const from = Math.floor(Date.parse("2026-05-30T00:00:00Z") / 1000);
+    const to = Math.floor(Date.parse("2026-06-03T00:00:00Z") / 1000);
+    const buckets = metricsHistory.getTrendBuckets({ tier: "daily", fromEpoch: from, toEpoch: to });
+    expect(buckets.length).toBe(1);
+    expect(buckets[0].cpu_min).toBe(12);
+    expect(buckets[0].cpu_max).toBe(18);
+  });
+
+  test("raw tier maps each row to min=max=avg=value, sample_count:1", () => {
+    insertRaw(db, "2026-06-01 10:05:00", { cpu: 17, mem: 41, disk: 52, load: 0.7, ctotal: 9, crunning: 8 });
+    const t = Math.floor(Date.parse("2026-06-01T10:05:00Z") / 1000);
+    const buckets = metricsHistory.getTrendBuckets({ tier: "raw", fromEpoch: t - 60, toEpoch: t + 60 });
+    expect(buckets.length).toBe(1);
+    const b = buckets[0];
+    expect(b.t).toBe(t);
+    expect(b.cpu_min).toBe(17);
+    expect(b.cpu_max).toBe(17);
+    expect(b.cpu_avg).toBe(17);
+    expect(b.memory_min).toBe(41);
+    expect(b.memory_avg).toBe(41);
+    expect(b.container_running_max).toBe(8);
+    expect(b.sample_count).toBe(1);
+  });
+
+  test("buckets outside [fromEpoch, toEpoch) are excluded", () => {
+    insertRaw(db, "2026-06-01 10:05:00", { cpu: 10, mem: 40, disk: 50, load: 0.1, ctotal: 8, crunning: 6 });
+    insertRaw(db, "2026-06-05 10:05:00", { cpu: 99, mem: 99, disk: 99, load: 9, ctotal: 1, crunning: 1 });
+    metricsHistory.rollupTick(db);
+    const from = Math.floor(Date.parse("2026-06-01T00:00:00Z") / 1000);
+    const to = Math.floor(Date.parse("2026-06-02T00:00:00Z") / 1000);
+    const buckets = metricsHistory.getTrendBuckets({ tier: "hourly", fromEpoch: from, toEpoch: to });
+    expect(buckets.every((x) => x.t >= from && x.t < to)).toBe(true);
+    expect(buckets.find((x) => x.cpu_max === 99)).toBeUndefined();
+  });
+});
+
 describe("app_state helpers", () => {
   test("getState returns null for an absent key", () => {
     expect(metricsHistory.getState("nope")).toBeNull();
