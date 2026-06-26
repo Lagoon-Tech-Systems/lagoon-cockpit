@@ -110,6 +110,34 @@ describe("runBackfill", () => {
   });
 });
 
+describe("boot sequence ordering (mirrors index.js)", () => {
+  test("init -> runBackfill -> rollupTick produces rollups and a set backfill flag on a real tmpdir DB", () => {
+    // Simulate the exact index.js boot ordering.
+    insertRaw(db, daysAgo(2), { cpu: 10, mem: 40, disk: 50, load: 0.1, ctotal: 4, crunning: 4 });
+    insertRaw(db, daysAgo(2), { cpu: 30, mem: 60, disk: 50, load: 0.3, ctotal: 4, crunning: 4 });
+
+    // 1. init already ran in beforeEach (metrics_history exists).
+    // 2. one-time backfill
+    const bf = metricsHistory.runBackfill(db);
+    expect(bf.done).toBe(true);
+    // 3. boot catch-up tick (idempotent over already-backfilled window)
+    expect(() => metricsHistory.rollupTick(db)).not.toThrow();
+
+    expect(metricsHistory.getState("backfill_v1_done")).toBe("1");
+    expect(db.prepare("SELECT COUNT(*) AS n FROM metrics_rollup_hourly").get().n).toBeGreaterThanOrEqual(1);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM metrics_rollup_daily").get().n).toBeGreaterThanOrEqual(1);
+  });
+
+  test("rollupTick after backfill is idempotent (catch-up does not duplicate)", () => {
+    insertRaw(db, daysAgo(2), { cpu: 12, mem: 40, disk: 50, load: 0.1, ctotal: 4, crunning: 4 });
+    metricsHistory.runBackfill(db);
+    const before = db.prepare("SELECT * FROM metrics_rollup_hourly ORDER BY bucket_start").all();
+    metricsHistory.rollupTick(db);
+    const after = db.prepare("SELECT * FROM metrics_rollup_hourly ORDER BY bucket_start").all();
+    expect(after).toEqual(before);
+  });
+});
+
 describe("guarded raw prune", () => {
   test("RAW_RETENTION_HOURS is 48", () => {
     expect(metricsHistory.RAW_RETENTION_HOURS).toBe(48);

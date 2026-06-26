@@ -106,6 +106,14 @@ function bootstrap() {
 
   initPush(db);
   metricsHistory.init(db);
+  // One-time backfill of pre-existing raw into rollups (guarded by app_state),
+  // then a boot catch-up rollup over the full raw window before the interval arms.
+  try {
+    metricsHistory.runBackfill(db);
+    metricsHistory.rollupTick(db);
+  } catch (err) {
+    console.error("[COCKPIT] rollup boot catch-up error:", err.message);
+  }
   alertEngine.init(db, sendPushNotification);
   webhooks.init(db);
   scheduler.init(db, auditLog);
@@ -275,6 +283,19 @@ function bootstrap() {
     5 * 60 * 1000,
   );
 
+  // Rollup engine — fold completed raw buckets into hourly/daily every 5 minutes
+  // (aligned with the WAL checkpoint cadence). Always-on, independent of clients.
+  const rollupInterval = setInterval(
+    () => {
+      try {
+        metricsHistory.rollupTick(db);
+      } catch (err) {
+        console.error("[COCKPIT] rollup tick error:", err.message);
+      }
+    },
+    5 * 60 * 1000,
+  );
+
   // Daily audit log rotation — prune entries older than retention period
   const { pruneAuditLog } = require("./db/sqlite");
   const auditPruneInterval = setInterval(
@@ -301,6 +322,7 @@ function bootstrap() {
     clearInterval(broadcastInterval);
     clearInterval(samplerInterval);
     clearInterval(walCheckpointInterval);
+    clearInterval(rollupInterval);
     clearInterval(auditPruneInterval);
     stopJwtCleanup();
     stopLockoutCleanup();
