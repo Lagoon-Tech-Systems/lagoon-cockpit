@@ -5,6 +5,7 @@ const { getSystemMetrics } = require("../system/metrics");
 const { checkAllSSL } = require("../system/ssl");
 const { probeAllEndpoints } = require("../system/endpoints");
 const metricsHistory = require("../system/history");
+const { parseRequest, clampDays, selectTier } = require("./history-query");
 const containers = require("../docker/containers");
 const dockerSystem = require("../docker/system");
 const { systemPrune } = require("../docker/prune");
@@ -124,9 +125,73 @@ router.get("/api/ssl", requireAuth, async (_req, res) => {
 });
 
 // ── Metrics History ──────────────────────────────────────
+// Map an hourly-rollup row to the legacy raw-row field names so existing
+// ?hours>48 callers keep working after the raw window shrinks to 48h.
+function hourlyToLegacyRow(b) {
+  return {
+    cpu_percent: b.cpu_avg,
+    memory_percent: b.memory_avg,
+    disk_percent: b.disk_avg,
+    load_1: b.load_avg,
+    container_total: b.container_total_avg,
+    container_running: b.container_running_avg,
+    created_at: new Date(b.t * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, ""),
+  };
+}
+
 router.get("/api/metrics/history", requireAuth, (req, res) => {
-  const hours = Math.min(Math.max(parseInt(req.query.hours || "24", 10), 1), 168); // Max 7 days
-  res.json({ history: metricsHistory.getHistory(hours), summary: metricsHistory.getHistorySummary(hours) });
+  const parsed = parseRequest(req.query);
+  if (parsed.error) {
+    return res.status(parsed.error.status).json(parsed.error.body);
+  }
+
+  const { retentionDays, servedDays, clamped } = clampDays(parsed.requestedDays, req.app.locals.edition);
+
+  // ── Legacy hours-only path: EXACT existing { history, summary } shape ──
+  if (parsed.mode === "legacy") {
+    // Clamp the legacy window too (no ?hours=8760 bypass). servedDays is in days.
+    const servedHours = Math.max(1, Math.round(servedDays * 24));
+    if (servedHours <= 48) {
+      return res.json({
+        history: metricsHistory.getHistory(servedHours),
+        summary: metricsHistory.getHistorySummary(servedHours),
+      });
+    }
+    // >48h: serve history from hourly rollups mapped to raw field names.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const fromEpoch = nowSec - servedHours * 3600;
+    const buckets = metricsHistory.getTrendBuckets({ tier: "hourly", fromEpoch, toEpoch: nowSec });
+    return res.json({
+      history: buckets.map(hourlyToLegacyRow),
+      summary: metricsHistory.getHistorySummary(servedHours),
+    });
+  }
+
+  // ── New range / from-to path: { resolution, buckets, summary, ... } ──
+  const tier = selectTier(servedDays);
+  const nowSec = Math.floor(Date.now() / 1000);
+  let fromEpoch;
+  let toEpoch;
+  if (parsed.mode === "fromto") {
+    toEpoch = Math.min(parsed.toEpoch, nowSec);
+    // clamp the window start so the served span never exceeds servedDays
+    fromEpoch = Math.max(parsed.fromEpoch, toEpoch - Math.round(servedDays * 86400));
+  } else {
+    toEpoch = nowSec;
+    fromEpoch = nowSec - Math.round(servedDays * 86400);
+  }
+
+  const buckets = metricsHistory.getTrendBuckets({ tier, fromEpoch, toEpoch });
+  const summaryHours = Math.max(1, Math.round(servedDays * 24));
+  return res.json({
+    resolution: tier,
+    buckets,
+    summary: metricsHistory.getHistorySummary(summaryHours),
+    clamped,
+    requestedDays: parsed.requestedDays,
+    servedDays,
+    retentionDays,
+  });
 });
 
 // ── SSE Stream ───────────────────────────────────────────
