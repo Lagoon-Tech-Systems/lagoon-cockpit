@@ -65,3 +65,26 @@ export const EDITION_LABELS: Record<string, string> = {
 export function getRequiredEdition(feature: string): string | null {
   return FEATURE_EDITIONS[feature] || null;
 }
+
+// Default limits mirror — keep in sync with packages/api/src/edition/features.js.
+// Used only for client-side fallback display; server response is authoritative.
+export const CE_LIMITS: Record<string, number> = {
+  servers: 3,
+  alertRules: 5,
+  users: 1,
+  webhooks: 3,
+  schedules: 5,
+  integrations: 2,
+  metricsRetentionDays: 30,
+};
+
+export const PRO_LIMITS: Record<string, number> = {
+  servers: 20,
+  alertRules: 100,
+  users: 5,
+  webhooks: 50,
+  schedules: 50,
+  integrations: 10,
+  auditRetentionDays: 30,
+  metricsRetentionDays: 365,
+};

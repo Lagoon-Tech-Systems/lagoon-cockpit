@@ -9,6 +9,7 @@ export interface EditionLimits {
   webhooks?: number;
   schedules?: number;
   integrations?: number;
+  metricsRetentionDays?: number;
   [key: string]: number | undefined;
 }
 
