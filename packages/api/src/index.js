@@ -41,6 +41,8 @@ async function sampleTick() {
 
 // Test-only DI hooks
 function _resetSamplerState() {
+  // Tests: after _resetSamplerState(), call _setRecorder(...) before invoking sampleTick — otherwise
+  // sampleTick falls back to the lazy-required history.js (the jest-mocked module in tests).
   _lastSampleMs = 0;
   _latest = null;
   _recordMetrics = null;

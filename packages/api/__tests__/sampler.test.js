@@ -89,7 +89,7 @@ describe("adaptive sampler cadence decision (shouldSample)", () => {
 });
 
 describe("sampleTick records regardless of SSE client count", () => {
-  let indexMod, metricsHistoryMod, sseMod, metricsMod, containersMod;
+  let indexMod, metricsHistoryMod;
   let db, dir;
 
   beforeEach(() => {
