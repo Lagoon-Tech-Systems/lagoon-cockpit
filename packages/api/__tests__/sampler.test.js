@@ -63,3 +63,27 @@ describe("recordMetrics NaN sanitization", () => {
     expect(row.load_1).toBe(1.23);
   });
 });
+
+describe("adaptive sampler cadence decision (shouldSample)", () => {
+  // Require lazily so the index module's exports are available without booting the server.
+  const { shouldSample } = require("../src/index");
+
+  test("watched (clientCount>0): minGap 15000, allows at exactly 14500ms (15000-500 tolerance)", () => {
+    expect(shouldSample({ now: 14500, lastSampleMs: 0, clientCount: 1 })).toBe(true);
+    expect(shouldSample({ now: 14499, lastSampleMs: 0, clientCount: 1 })).toBe(false);
+  });
+
+  test("watched: blocks an early second sample", () => {
+    expect(shouldSample({ now: 5000, lastSampleMs: 0, clientCount: 3 })).toBe(false);
+  });
+
+  test("idle (clientCount=0): minGap 60000, blocks at 15000ms, allows at 59500ms", () => {
+    expect(shouldSample({ now: 15000, lastSampleMs: 0, clientCount: 0 })).toBe(false);
+    expect(shouldSample({ now: 59500, lastSampleMs: 0, clientCount: 0 })).toBe(true);
+    expect(shouldSample({ now: 59499, lastSampleMs: 0, clientCount: 0 })).toBe(false);
+  });
+
+  test("first ever sample (lastSampleMs=0, now large) always allowed", () => {
+    expect(shouldSample({ now: 1_000_000, lastSampleMs: 0, clientCount: 0 })).toBe(true);
+  });
+});
