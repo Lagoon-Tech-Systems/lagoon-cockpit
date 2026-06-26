@@ -5,7 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "test": "jest"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -44,7 +45,9 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "babel-jest": "~30.0.0",
     "babel-preset-expo": "~55.0.8",
+    "jest": "~30.0.0",
     "typescript": "~6.0.2"
   },
   "private": true
