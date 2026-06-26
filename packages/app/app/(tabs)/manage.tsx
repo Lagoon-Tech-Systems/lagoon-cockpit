@@ -31,6 +31,7 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'Networks', description: 'Docker network topology', icon: 'globe', iconColor: COLORS.teal, route: '/manage/networks', section: 'docker' },
   /* Monitoring */
   { label: 'Metrics History', description: 'CPU/RAM/disk trends over time', icon: 'stats-chart', iconColor: COLORS.green, route: '/manage/metrics', section: 'monitoring' },
+  { label: 'Trends', description: 'Long-term CPU/RAM/disk/load history (up to 1y)', icon: 'trending-up', iconColor: COLORS.indigo, route: '/manage/trends', section: 'monitoring' },
   { label: 'Alert Rules', description: 'Custom threshold-based alerts', icon: 'notifications', iconColor: COLORS.yellow, route: '/manage/alert-rules', adminOnly: true, section: 'monitoring' },
   { label: 'Push Notifications', description: 'Manage mobile push alert preferences', icon: 'phone-portrait', iconColor: COLORS.teal, route: '/manage/notifications', section: 'monitoring' },
   { label: 'Webhooks', description: 'Fire events to Slack/Discord/n8n', icon: 'link', iconColor: COLORS.indigo, route: '/manage/webhooks', adminOnly: true, section: 'monitoring' },
