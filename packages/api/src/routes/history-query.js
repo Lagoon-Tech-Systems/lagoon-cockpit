@@ -37,7 +37,7 @@ function parseRequest(query) {
     if (Array.isArray(range)) return badRequest("range must be a single string");
     if (!Object.prototype.hasOwnProperty.call(RANGE_DAYS, range))
       return badRequest("range must be one of 24h,7d,30d,90d,1y");
-    return { mode: "range", requestedDays: RANGE_DAYS[range] };
+    return { mode: "range", requestedDays: RANGE_DAYS[range], fromEpoch: null, toEpoch: null };
   }
 
   // ── from/to (epoch seconds) ────────────────────────────
@@ -57,12 +57,16 @@ function parseRequest(query) {
 
   // ── legacy hours (default 24) ──────────────────────────
   if (hours === undefined) {
-    return { mode: "legacy", hours: 24, requestedDays: 1 };
+    return { mode: "legacy", hours: 24, requestedDays: 1, fromEpoch: null, toEpoch: null };
   }
   const h = parseFinitePositive(hours, "hours");
   if (h.err) return h.err;
   const hoursInt = Math.floor(h.value);
-  return { mode: "legacy", hours: hoursInt, requestedDays: hoursInt / 24 };
+  // Coerce requestedDays into [1, ABS_MAX_DAYS] — same behaviour as clampDays pre-step.
+  // The range/fromto paths rely on clampDays to enforce this; the legacy path must match.
+  const rawDays = hoursInt / 24;
+  const requestedDays = Math.min(Math.max(rawDays, 1), ABS_MAX_DAYS);
+  return { mode: "legacy", hours: hoursInt, requestedDays, fromEpoch: null, toEpoch: null };
 }
 
 /**
@@ -85,6 +89,13 @@ function clampDays(requestedDays, edition) {
  *  hourly : servedDays <= 90
  *  daily  : else
  * If the chosen tier would exceed MAX_POINTS, auto-promote coarser.
+ *
+ * NOTE on MAX_POINTS backstop: under current tier boundaries the while-loop is
+ * intentionally slack — raw tops out at ~48 pts (0.5d × 24 × 4), hourly at
+ * ~2160 pts (90d × 24), both well under 5000.  The backstop is a
+ * future-proof guard for when resolution intervals or tier cutoffs change.
+ * Hard enforcement of MAX_POINTS as a returned-row cap belongs in the route
+ * layer (Task 4.2), not here.
  */
 function selectTier(servedDays) {
   let tier = servedDays <= 0.5 ? "raw" : servedDays <= 90 ? "hourly" : "daily";

@@ -73,11 +73,58 @@ describe("history-query: parseRequest precedence + adversarial guards", () => {
     expect(r.requestedDays).toBeCloseTo(1, 5);
   });
 
-  test("legacy hours=8760 parses but requestedDays reflects 365 (clamp is separate)", () => {
+  test("legacy hours=8760 parses and requestedDays reflects 365 (within [1,730])", () => {
     const r = parseRequest({ hours: "8760" });
     expect(r.mode).toBe("legacy");
     expect(r.hours).toBe(8760);
     expect(r.requestedDays).toBeCloseTo(365, 0);
+  });
+
+  test("legacy hours=1e9 is coerced: requestedDays clamped to 730", () => {
+    const r = parseRequest({ hours: "1e9" });
+    expect(r.error).toBeUndefined();
+    expect(r.mode).toBe("legacy");
+    expect(r.requestedDays).toBe(730);
+  });
+
+  test("legacy hours=99999999999 is coerced: requestedDays clamped to 730", () => {
+    const r = parseRequest({ hours: "99999999999" });
+    expect(r.error).toBeUndefined();
+    expect(r.mode).toBe("legacy");
+    expect(r.requestedDays).toBe(730);
+  });
+
+  test("range path includes fromEpoch: null and toEpoch: null", () => {
+    const r = parseRequest({ range: "7d" });
+    expect(r.error).toBeUndefined();
+    expect(r.fromEpoch).toBeNull();
+    expect(r.toEpoch).toBeNull();
+  });
+
+  test("legacy path (no args) includes fromEpoch: null and toEpoch: null", () => {
+    const r = parseRequest({});
+    expect(r.error).toBeUndefined();
+    expect(r.fromEpoch).toBeNull();
+    expect(r.toEpoch).toBeNull();
+  });
+
+  test("legacy path (hours supplied) includes fromEpoch: null and toEpoch: null", () => {
+    const r = parseRequest({ hours: "48" });
+    expect(r.error).toBeUndefined();
+    expect(r.fromEpoch).toBeNull();
+    expect(r.toEpoch).toBeNull();
+  });
+
+  test("array from param is rejected with 400", () => {
+    const r = parseRequest({ from: ["100", "200"], to: "300" });
+    expect(r.error.status).toBe(400);
+    expect(r.error.body.error).toMatch(/single string/i);
+  });
+
+  test("array to param is rejected with 400", () => {
+    const r = parseRequest({ from: "100", to: ["200", "300"] });
+    expect(r.error.status).toBe(400);
+    expect(r.error.body.error).toMatch(/single string/i);
   });
 
   test("array hours param is rejected with 400", () => {
