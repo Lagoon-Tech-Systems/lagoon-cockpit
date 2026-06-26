@@ -93,4 +93,23 @@ function getHistorySummary(hours = 24) {
     .get(hours);
 }
 
-module.exports = { init, recordMetrics, getHistory, getHistorySummary };
+/** Read a value from the generic app_state key/value table; null if absent. */
+function getState(key) {
+  if (!db) return null;
+  const row = db.prepare("SELECT value FROM app_state WHERE key = ?").get(key);
+  return row ? row.value : null;
+}
+
+/** Upsert a value into the generic app_state key/value table. */
+function setState(key, value) {
+  if (!db) return;
+  db.prepare(
+    `
+    INSERT INTO app_state (key, value)
+    VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `,
+  ).run(key, value);
+}
+
+module.exports = { init, recordMetrics, getHistory, getHistorySummary, getState, setState };
