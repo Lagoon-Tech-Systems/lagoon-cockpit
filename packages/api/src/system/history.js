@@ -94,22 +94,22 @@ function getHistorySummary(hours = 24) {
 }
 
 /** Read a value from the generic app_state key/value table; null if absent. */
-function getState(key) {
-  if (!db) return null;
-  const row = db.prepare("SELECT value FROM app_state WHERE key = ?").get(key);
+function getState(key, conn = db) {
+  if (!conn) return null;
+  const row = conn.prepare("SELECT value FROM app_state WHERE key = ?").get(key);
   return row ? row.value : null;
 }
 
 /** Upsert a value into the generic app_state key/value table. */
-function setState(key, value) {
-  if (!db) return;
-  db.prepare(
+function setState(key, value, conn = db) {
+  if (!conn) return;
+  conn.prepare(
     `
     INSERT INTO app_state (key, value)
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `,
-  ).run(key, value);
+  ).run(key, String(value));
 }
 
 // SQL fragment shared by tick + backfill. Folds raw rows whose hour bucket is
@@ -160,19 +160,19 @@ function rollupTick(database) {
   const nowSec = Math.floor(Date.now() / 1000);
   const lastCompleteHour = Math.floor(nowSec / 3600) * 3600; // exclusive upper bound (current hour excluded)
 
-  const wmRaw = getState("rollup_hourly_watermark");
+  const wmRaw = getState("rollup_hourly_watermark", database);
   const wm = wmRaw !== null ? parseInt(wmRaw, 10) : 0;
   const hourlyLow = wm > 0 ? wm - 3600 : 0; // slack: re-roll the boundary bucket
 
   const run = database.transaction(() => {
     database
       .prepare(HOURLY_UPSERT_SQL)
-      .run(hourlyLow > 0 ? epochToCreatedAt(hourlyLow) : "0000-00-00 00:00:00", epochToCreatedAt(lastCompleteHour));
+      .run(hourlyLow > 0 ? epochToCreatedAt(hourlyLow) : "1970-01-01 00:00:00", epochToCreatedAt(lastCompleteHour));
 
     const maxHourly = database
       .prepare("SELECT MAX(bucket_start) AS m FROM metrics_rollup_hourly WHERE bucket_start < ?")
       .get(lastCompleteHour);
-    if (maxHourly && maxHourly.m !== null) setState("rollup_hourly_watermark", String(maxHourly.m));
+    if (maxHourly && maxHourly.m !== null) setState("rollup_hourly_watermark", String(maxHourly.m), database);
   });
   run();
 }

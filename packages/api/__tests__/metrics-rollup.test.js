@@ -135,9 +135,12 @@ describe("rollupTick raw -> hourly", () => {
     insertRaw(db, "2026-06-01 13:50:00", { cpu: 15, mem: 22, disk: 30, load: 0.2, ctotal: 2, crunning: 2 });
     metricsHistory.rollupTick(db);
     const first = db.prepare("SELECT * FROM metrics_rollup_hourly ORDER BY bucket_start").all();
+    const wmAfterFirst = metricsHistory.getState("rollup_hourly_watermark");
     metricsHistory.rollupTick(db);
     const second = db.prepare("SELECT * FROM metrics_rollup_hourly ORDER BY bucket_start").all();
+    const wmAfterSecond = metricsHistory.getState("rollup_hourly_watermark");
     expect(second).toEqual(first);
+    expect(wmAfterSecond).toBe(wmAfterFirst); // watermark is stable across idempotent re-runs
   });
 
   test("the current incomplete hour is NOT finalized", () => {
