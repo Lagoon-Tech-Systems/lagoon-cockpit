@@ -324,6 +324,7 @@ function bootstrap() {
     clearInterval(walCheckpointInterval);
     clearInterval(rollupInterval);
     clearInterval(auditPruneInterval);
+    metricsHistory.shutdown();
     stopJwtCleanup();
     stopLockoutCleanup();
     stopIntegrations();

@@ -4,6 +4,8 @@
  */
 
 let db = null;
+/** Handle for the hourly raw-prune interval armed in init(); cleared by shutdown(). */
+let pruneInterval = null;
 
 /** Post-backfill raw retention. Pre-backfill the legacy 168h window is preserved. */
 const RAW_RETENTION_HOURS = 48;
@@ -28,7 +30,10 @@ function init(database) {
   // Guarded raw prune (rollup-before-prune): deletes only rolled raw older than
   // the effective retention. Runs hourly. The rollup interval itself is armed in
   // index.js (always-on, 5-min) alongside boot catch-up + backfill.
-  setInterval(
+  // Re-arming on a repeat init() (e.g. tests) clears the prior handle first so
+  // we never leak an interval.
+  if (pruneInterval) clearInterval(pruneInterval);
+  pruneInterval = setInterval(
     () => {
       try {
         if (db) pruneRaw(db);
@@ -38,6 +43,17 @@ function init(database) {
     },
     60 * 60 * 1000,
   );
+  // Don't let the background prune timer keep the process (or a jest run) alive.
+  if (typeof pruneInterval.unref === "function") pruneInterval.unref();
+}
+
+/** Clear the hourly raw-prune interval. Called from index.js graceful shutdown
+ *  and from test teardown so jest --detectOpenHandles stays clean. */
+function shutdown() {
+  if (pruneInterval) {
+    clearInterval(pruneInterval);
+    pruneInterval = null;
+  }
 }
 
 /** Coerce a value to a finite number or null (NaN/Infinity → null so SQLite binds clean NULL) */
@@ -346,7 +362,7 @@ function pruneRaw(database) {
 }
 
 module.exports = {
-  init, recordMetrics, getHistory, getHistorySummary,
+  init, shutdown, recordMetrics, getHistory, getHistorySummary,
   getState, setState, rollupTick, getTrendBuckets, runBackfill,
   pruneRaw, RAW_RETENTION_HOURS,
 };

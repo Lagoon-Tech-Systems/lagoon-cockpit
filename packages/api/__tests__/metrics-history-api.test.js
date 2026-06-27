@@ -273,6 +273,7 @@ afterAll(() => {
   const { stopLockoutCleanup } = require("../src/auth/middleware");
   stopCleanup();
   stopLockoutCleanup();
+  metricsHistory.shutdown();
   try { database.close(); } catch { /* ignore */ }
   fs.rmSync(httpTmp, { recursive: true, force: true });
 });
