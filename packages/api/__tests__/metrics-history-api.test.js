@@ -144,13 +144,13 @@ describe("history-query: parseRequest precedence + adversarial guards", () => {
 });
 
 describe("history-query: clampDays by edition", () => {
-  const ce = { name: "ce", limits: { metricsRetentionDays: 30 } };
+  const ce = { name: "ce", limits: { metricsRetentionDays: 90 } };
   const pro = { name: "pro", limits: { metricsRetentionDays: 365 } };
 
-  test("CE clamps 365 -> 30 and flags clamped", () => {
+  test("CE clamps 365 -> 90 and flags clamped", () => {
     const c = clampDays(365, ce);
-    expect(c.retentionDays).toBe(30);
-    expect(c.servedDays).toBe(30);
+    expect(c.retentionDays).toBe(90);
+    expect(c.servedDays).toBe(90);
     expect(c.clamped).toBe(true);
   });
 
@@ -222,7 +222,7 @@ metricsHistory.init(database);
 const app = express();
 app.use(express.json());
 // Default edition is CE; individual tests overwrite app.locals.edition.
-app.locals.edition = { name: "ce", limits: { metricsRetentionDays: 30 } };
+app.locals.edition = { name: "ce", limits: { metricsRetentionDays: 90 } };
 const authRoutes = require("../src/routes/auth");
 const systemRoutes = require("../src/routes/system");
 app.use(authRoutes);
@@ -304,14 +304,14 @@ describe("GET /api/metrics/history: range -> tier selection", () => {
 });
 
 describe("GET /api/metrics/history: edition clamp (200 + clamped:true)", () => {
-  test("CE range=1y clamps to 30 days, still 200", async () => {
-    setEdition("ce", 30);
+  test("CE range=1y clamps to 90 days, still 200", async () => {
+    setEdition("ce", 90);
     const res = await auth(request(app).get("/api/metrics/history?range=1y"));
     expect(res.status).toBe(200);
     expect(res.body.clamped).toBe(true);
     expect(res.body.requestedDays).toBe(365);
-    expect(res.body.servedDays).toBe(30);
-    expect(res.body.retentionDays).toBe(30);
+    expect(res.body.servedDays).toBe(90);
+    expect(res.body.retentionDays).toBe(90);
   });
 
   test("Pro range=1y is not clamped", async () => {
@@ -323,17 +323,17 @@ describe("GET /api/metrics/history: edition clamp (200 + clamped:true)", () => {
 });
 
 describe("GET /api/metrics/history: PAYWALL CANNOT BE BYPASSED", () => {
-  // CE retention = 30 days. We seed poison rows at -200d in BOTH the hourly
+  // CE retention = 90 days. We seed poison rows at -200d in BOTH the hourly
   // and daily rollup tables so the test is discriminating regardless of which
   // tier the clamped path selects.
-  //   • range=1y CE → servedDays=30 → tier=hourly → reads metrics_rollup_hourly
+  //   • range=1y CE → servedDays=90 → tier=hourly → reads metrics_rollup_hourly
   //   • hours=8760 CE → legacy hourly path → reads metrics_rollup_hourly
-  //   • from/to spanning 200d CE → servedDays=30 → tier=hourly → same
-  // A count-only clamp (e.g. LIMIT 30) on the DB query would still return the
+  //   • from/to spanning 200d CE → servedDays=90 → tier=hourly → same
+  // A count-only clamp (e.g. LIMIT 90) on the DB query would still return the
   // -200d row when it is the ONLY row in the table, so these tests WOULD FAIL
-  // against such an implementation because the age assertion would breach 30d.
+  // against such an implementation because the age assertion would breach 90d.
   const nowSec = Math.floor(Date.now() / 1000);
-  const CE_DAYS = 30;
+  const CE_DAYS = 90;
   // Hourly bucket 200 days ago (on an exact hour boundary).
   const hourlyBucket200 = Math.floor((nowSec - 200 * 86400) / 3600) * 3600;
   // Daily bucket 200 days ago.
@@ -367,7 +367,7 @@ describe("GET /api/metrics/history: PAYWALL CANNOT BE BYPASSED", () => {
     assertOldestWithinWindow(buckets, CE_DAYS);
   });
 
-  test("CE hours=8760 (legacy bypass attempt) clamps to 30d window — hourly poison absent", async () => {
+  test("CE hours=8760 (legacy bypass attempt) clamps to 90d window — hourly poison absent", async () => {
     setEdition("ce", CE_DAYS);
     const res = await auth(request(app).get("/api/metrics/history?hours=8760"));
     expect(res.status).toBe(200);
@@ -391,7 +391,7 @@ describe("GET /api/metrics/history: PAYWALL CANNOT BE BYPASSED", () => {
     expect(rows.every((r) => r.cpu_percent !== 99)).toBe(true);
   });
 
-  test("CE from/to spanning 200d clamps served window to 30d (age assertion)", async () => {
+  test("CE from/to spanning 200d clamps served window to 90d (age assertion)", async () => {
     setEdition("ce", CE_DAYS);
     const from = nowSec - 200 * 86400;
     const res = await auth(

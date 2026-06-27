@@ -69,13 +69,13 @@ describe("Edition Features", () => {
     expect(Object.keys(entLimits)).toHaveLength(0);
   });
 
-  test("metricsRetentionDays present in both limit maps with values 30/365", () => {
-    expect(CE_LIMITS.metricsRetentionDays).toBe(30);
+  test("metricsRetentionDays present in both limit maps with values 90/365", () => {
+    expect(CE_LIMITS.metricsRetentionDays).toBe(90);
     expect(PRO_LIMITS.metricsRetentionDays).toBe(365);
   });
 
   test("defaultLimits surfaces metricsRetentionDays for ce and pro", () => {
-    expect(defaultLimits("ce").metricsRetentionDays).toBe(30);
+    expect(defaultLimits("ce").metricsRetentionDays).toBe(90);
     expect(defaultLimits("pro").metricsRetentionDays).toBe(365);
   });
 
@@ -98,11 +98,11 @@ describe("resolveRetentionDays", () => {
     expect(resolveRetentionDays({ name: "private", limits: {} })).toBe(730);
   });
 
-  test("ce without metricsRetentionDays claim resolves to 30", () => {
-    expect(resolveRetentionDays({ name: "ce", limits: {} })).toBe(30);
+  test("ce without metricsRetentionDays claim resolves to 90", () => {
+    expect(resolveRetentionDays({ name: "ce", limits: {} })).toBe(90);
   });
 
-  test("pro WITHOUT metricsRetentionDays claim falls back to 365, not 30", () => {
+  test("pro WITHOUT metricsRetentionDays claim falls back to 365, not the CE floor", () => {
     // pre-existing Pro JWT minted before this feature has no claim
     expect(resolveRetentionDays({ name: "pro", limits: {} })).toBe(365);
   });
@@ -112,15 +112,15 @@ describe("resolveRetentionDays", () => {
     expect(resolveRetentionDays({ name: "pro", limits: { metricsRetentionDays: 365 } })).toBe(365);
   });
 
-  test("unknown / missing edition fails closed to 30", () => {
-    expect(resolveRetentionDays(undefined)).toBe(30);
-    expect(resolveRetentionDays({})).toBe(30);
-    expect(resolveRetentionDays({ name: "bogus", limits: {} })).toBe(30);
+  test("unknown / missing edition fails closed to CE floor (90)", () => {
+    expect(resolveRetentionDays(undefined)).toBe(90);
+    expect(resolveRetentionDays({})).toBe(90);
+    expect(resolveRetentionDays({ name: "bogus", limits: {} })).toBe(90);
   });
 
   test("non-finite limit value is ignored (falls back by edition name)", () => {
     expect(resolveRetentionDays({ name: "pro", limits: { metricsRetentionDays: Infinity } })).toBe(365);
-    expect(resolveRetentionDays({ name: "ce", limits: { metricsRetentionDays: NaN } })).toBe(30);
+    expect(resolveRetentionDays({ name: "ce", limits: { metricsRetentionDays: NaN } })).toBe(90);
   });
 });
 
@@ -128,8 +128,8 @@ describe("metricsRetentionDays cross-surface parity", () => {
   const proSharedEdition = require("/home/bigabou/automation/projects/cockpit-pro/packages/shared/src/edition.js");
 
   test("CE value matches across API and cockpit-pro shared", () => {
-    expect(CE_LIMITS.metricsRetentionDays).toBe(30);
-    expect(proSharedEdition.CE_LIMITS.metricsRetentionDays).toBe(30);
+    expect(CE_LIMITS.metricsRetentionDays).toBe(90);
+    expect(proSharedEdition.CE_LIMITS.metricsRetentionDays).toBe(90);
     expect(proSharedEdition.CE_LIMITS.metricsRetentionDays).toBe(CE_LIMITS.metricsRetentionDays);
   });
 

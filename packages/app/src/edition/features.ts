@@ -75,7 +75,7 @@ export const CE_LIMITS: Record<string, number> = {
   webhooks: 3,
   schedules: 5,
   integrations: 2,
-  metricsRetentionDays: 30,
+  metricsRetentionDays: 90,
 };
 
 export const PRO_LIMITS: Record<string, number> = {
