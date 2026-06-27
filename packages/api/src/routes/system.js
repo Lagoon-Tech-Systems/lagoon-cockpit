@@ -18,6 +18,26 @@ const { safeError } = require("../middleware");
 const SERVER_NAME = process.env.SERVER_NAME || "Cockpit Server";
 const AUTH_MODE = process.env.AUTH_MODE || "key";
 
+// ── AGPL §13 Corresponding-Source offer (public, unauthenticated) ──
+// Lagoon Cockpit CE is AGPL-3.0-only. Anyone interacting with this modified
+// program over the network is offered the Corresponding Source per AGPL §13.
+// Machine-readable + linked from the app UI (Settings → About).
+const SOURCE_URL = "https://github.com/Lagoon-Tech-Systems/lagoon-cockpit";
+const APP_VERSION = require("../../package.json").version;
+router.get("/source", (_req, res) => {
+  res.json({
+    name: "lagoon-cockpit",
+    edition: "community",
+    license: "AGPL-3.0-only",
+    version: APP_VERSION,
+    source: SOURCE_URL,
+    notice:
+      "Lagoon Cockpit Community Edition is free software under AGPL-3.0-only. " +
+      "The complete Corresponding Source for this running instance is available " +
+      "at the URL above (AGPL §13).",
+  });
+});
+
 // ── Overview ─────────────────────────────────────────────
 router.get("/api/overview", requireAuth, async (_req, res) => {
   try {

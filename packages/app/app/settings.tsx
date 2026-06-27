@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -313,6 +313,20 @@ export default function SettingsScreen() {
                     ? 'Free — upgrade for more features'
                     : 'Active'
               }
+              textPrimary={colors.textPrimary}
+              textSecondary={colors.textTertiary}
+              border={colors.border}
+            />
+            {/* AGPL §13: offer Corresponding Source to network users of this CE instance. */}
+            <SettingsRow
+              icon="logo-github"
+              iconColor={colors.textSecondary}
+              label="Source Code (AGPL-3.0)"
+              value="github.com/Lagoon-Tech-Systems/lagoon-cockpit"
+              onPress={() =>
+                Linking.openURL('https://github.com/Lagoon-Tech-Systems/lagoon-cockpit')
+              }
+              showChevron
               textPrimary={colors.textPrimary}
               textSecondary={colors.textTertiary}
               border={colors.border}
