@@ -1,5 +1,56 @@
 # Changelog
 
+## [2.1.0](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/compare/v2.0.0...v2.1.0) (2026-06-27)
+
+
+### Features
+
+* add app screenshots, fix ContainerCard web nesting, update launch content ([5e8d8e9](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/5e8d8e9b7236e6286cc8f179616e86c7cfae3244))
+* add demo GIF to README ([9ae1c45](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/9ae1c45bf583e87c9803da69c5e0be41fe095947))
+* add Pro module UI screens and API extensions ([8eccbe6](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/8eccbe697a18549095c71f425bf9994a8b73b812))
+* **api:** add getState/setState app_state helpers to history module ([8d0b329](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/8d0b329b41a61494160486aef539a6377b4e8827))
+* **api:** add history-query helpers (range/from-to/hours parse, edition clamp, tier select) ([c328dc9](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/c328dc9f0dc622e98308c135961d7debea1a37d8))
+* **api:** add scripts/rollback-trends.js per spec §7 (tested) ([753648c](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/753648c2ba1d33753f83c9cc46688ab1f7a8b415))
+* **api:** add v3 migration for trend rollup tables and app_state ([31e984d](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/31e984d3d2cea93aea525df65b3eb23c27202064))
+* **api:** always-on adaptive metrics sampler decoupled from SSE ([1ec47e9](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/1ec47e909b62e7d105ac3cccae2ef65945477923))
+* **api:** arm 5-min rollup interval, boot backfill + catch-up, shutdown clear ([1d0bcbe](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/1d0bcbed0d6d542bb3a531cb492053b05b6489a3))
+* **api:** extend GET /api/metrics/history with range/tier-select, edition clamp on every path, and backward-compatible legacy shape ([0a947b7](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/0a947b7d15492bf39893004354cfac00acd372c6))
+* **api:** getTrendBuckets reads raw/hourly/daily into uniform bucket shape ([f8585b2](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/f8585b2e67f8d7265bc0e0162b9635749d548126))
+* **api:** guarded raw prune deletes only rolled raw, RAW_RETENTION_HOURS=48 ([61e319a](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/61e319a0119e08ea349844d66070bb09300274cc))
+* **api:** one-time guarded backfill rolls existing raw into rollups ([35c31a7](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/35c31a7e31759248e8f1b67dbe6fd81f6448aa46))
+* **api:** rollupTick folds completed raw buckets into hourly rollups ([d7f2be2](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/d7f2be2c80f8f0d54f9c2d807aadd63c36576ac5))
+* **api:** rollupTick folds hourly into sample-weighted daily rollups ([9ec5cbd](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/9ec5cbd09a3d047c5d62d2bfba986a51ca0de2eb))
+* **api:** widen getHistorySummary additively with *_min and container aggregates; pin legacy-key snapshot ([10a0301](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/10a03015a807146a28f723cdb08bfc06ff826487))
+* **app:** add framework-free trends pill + range logic with tests ([602a064](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/602a06449dd2ed67c0c1c84c36fefd3f5e69fc82))
+* **app:** add PWA support + web deployment config ([02c473e](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/02c473e2df49b34c0e70983c7ea617edcfe83ddd))
+* **app:** add Trends entry to Manage monitoring menu ([df1aca3](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/df1aca3c5c5333c7f45b7e75dfd8d5954f1f1f67))
+* **app:** add Trends screen with range pills and min/max band charts ([2fac908](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/2fac908906c0d077220c07435ce0fdab1f3c546a))
+* **app:** add trends store slice with locked-range fetch pre-gate ([054eeab](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/054eeab9d6e20fc0874ecc223df9d9f17aaee862))
+* **app:** add typed trends-history contract + band-series mapping ([cba36c2](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/cba36c280d9df3cc69e7ddc512d52698ebba521f))
+* **app:** attach res.status to thrown apiFetch errors ([8095281](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/8095281a1c0e36eb40ad4e39457c4b59c0a3c884))
+* **app:** mirror metricsRetentionDays limit into client edition map ([d78c4db](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/d78c4dba3608a496195ae2c3db9f11bf84b886ac))
+* **cockpit:** add LTS monitoring tabs (kaizen-audits, sentinel-live, web-metrics) ([1292aa8](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/1292aa8870b6db879ab453d799b17c7c01a6c911))
+* **edition:** add metricsRetentionDays limit (CE 30 / Pro 365) ([9e569e5](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/9e569e5d0900ea2a3dd8d4bcc0fd5d53c5581646))
+* **edition:** add resolveRetentionDays fail-closed by edition name ([f3c41c0](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/f3c41c0f504828645144d366d45a557de69d2b59))
+* **edition:** raise CE metrics retention floor 30d-&gt;90d (board-ratified) ([327754c](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/327754ce35b74dc77495c695a4bf47c31d65bd94))
+* surface AGPL §13 Corresponding-Source offer to network users ([04dc49c](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/04dc49c33e9ab47eadbb5e784f46c43b3093012a))
+
+
+### Bug Fixes
+
+* **api:** backfill guard reads passed connection + epoch-0 lower-bound sentinel ([d683b77](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/d683b77cebdba6f993d1e74efc389cf008743445))
+* **api:** bound legacy hours to [1,730] days + normalize parseRequest shape ([9313e8a](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/9313e8af800d27bfb643bf64ebb820b2c1f347db))
+* **api:** clear history.js raw-prune interval on shutdown (no handle leak) ([1b1e632](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/1b1e632a38338c77dabcddc18c850ad5b4573ad2))
+* **api:** coerce non-finite metrics to null in recordMetrics ([3465fb0](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/3465fb0fc8446a8619ab22f587b87e09849d73b9))
+* **api:** enforce MAX_POINTS cap, discriminating paywall tests, served-window summary ([3467bec](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/3467beca57a212ea2c98e613e300244a442ba7ed))
+* **api:** legacy hours&gt;48 summary covers served window, not just 48h raw ([47852e6](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/47852e6c2b3642dbad465caf2b25429e2c296ba1))
+* **api:** thread db connection through app_state helpers so rollup watermark is transaction-atomic ([d177432](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/d177432be1f338c1b5bf6c251328a5e48f1176ec))
+* **app:** guard trends chart helpers + accurate band-hint label ([e546ce8](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/e546ce840351135d7168f275effd142ba7a3d41e))
+* correct license from MIT to AGPL-3.0 in launch Dev.to article ([c90700e](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/c90700e79b84d589ed20b0079be941e709a6216b))
+* correct license from MIT to AGPL-3.0 in launch LinkedIn post ([c10b491](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/c10b491c561778abc1c2b2533c08d2891842761c))
+* correct license to AGPL-3.0, redact real stack names from content Dev.to article ([5b36924](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/5b3692430f56363c96951b72a4db9cb110eafa0a))
+* correct license to AGPL-3.0, remove MT5 trading reference from content LinkedIn post ([e27783c](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/commit/e27783cf585816e46cc2532ee3892c33882cc296))
+
 ## [Unreleased]
 
 ### Security
