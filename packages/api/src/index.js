@@ -22,6 +22,12 @@ function getLatest() {
 }
 
 const _previousContainerStates = {};
+// Restart-loop dedup (B7 / G-Gk1): id -> { lastCount, windowStart, rises, alerted }.
+// Populated only for gated-inspected containers (see shouldInspect below) — pruned
+// alongside _previousContainerStates for removed container ids.
+const _restartHistory = {};
+const RESTART_WINDOW_MS = 5 * 60 * 1000;
+const RESTART_RISE_THRESHOLD = 3;
 
 // Single alert-evaluation + container-state-detection site (was inside broadcastLoop).
 // Called from sampleTick so it runs even with zero SSE clients.
@@ -31,9 +37,14 @@ async function evaluateAndDetect(metrics, containerStats, allContainers) {
   const webhooks = require("./system/webhooks");
   const { sendPushNotification } = require("./push/expo");
   const { broadcast } = require("./stream/sse");
+  const { inspectContainer } = require("./docker/containers");
+  const now = Date.now();
   if (!_maintenanceMode) alertEngine.evaluateRules(metrics, containerStats);
   for (const c of allContainers) {
     const prev = _previousContainerStates[c.id];
+    // Snapshot before this tick's inspect (below) may flip `alerted` — suppression
+    // reflects crash-loop state established in a prior tick, never the same tick.
+    const restartEntryBefore = _restartHistory[c.id];
     if (prev && prev !== c.state) {
       const alert = {
         type: "container_state_change",
@@ -44,7 +55,10 @@ async function evaluateAndDetect(metrics, containerStats, allContainers) {
         timestamp: new Date().toISOString(),
       };
       broadcast("alert", alert);
-      if (!_maintenanceMode && c.state !== "running" && prev === "running") {
+      // Suppression: a live crash-loop alert supersedes the regular down push —
+      // the state_change webhook + 'alert' broadcast above remain unconditional.
+      const suppressDownPush = !!(restartEntryBefore && restartEntryBefore.alerted);
+      if (!_maintenanceMode && c.state !== "running" && prev === "running" && !suppressDownPush) {
         sendPushNotification(
           `Container Down: ${c.name}`,
           `${c.name} changed from ${prev} to ${c.state}`,
@@ -55,10 +69,53 @@ async function evaluateAndDetect(metrics, containerStats, allContainers) {
       }
       webhooks.fireWebhooks("container.state_change", alert).catch(() => {});
     }
+
+    // Gated inspect: only pay the Docker inspect cost for containers that look like
+    // they're restarting, or that just transitioned state — never every container
+    // every tick.
+    const shouldInspect = String(c.status || "").includes("Restarting") || c.state === "restarting" || (prev && prev !== c.state);
+    if (shouldInspect) {
+      try {
+        const inspect = await inspectContainer(c.id);
+        const rc = inspect?.State?.RestartCount;
+        if (typeof rc === "number") {
+          let entry = _restartHistory[c.id];
+          if (!entry) {
+            // Baseline on first sight — no rise counted, so a stale RestartCount from
+            // before this process started never produces a false-fire.
+            entry = { lastCount: rc, windowStart: now, rises: 0, alerted: false };
+            _restartHistory[c.id] = entry;
+          } else {
+            if (now - entry.windowStart > RESTART_WINDOW_MS) {
+              entry.windowStart = now;
+              entry.rises = 0;
+              entry.alerted = false;
+            }
+            if (rc > entry.lastCount) {
+              entry.rises += rc - entry.lastCount;
+              entry.lastCount = rc;
+            }
+          }
+          if (entry.rises >= RESTART_RISE_THRESHOLD && !entry.alerted && !_maintenanceMode) {
+            sendPushNotification(
+              `🔁 ${c.name} crash-looping (${entry.rises} restarts in 5 min)`,
+              `${c.name} is restarting repeatedly`,
+              { type: "container", containerId: c.id },
+              { severity: "critical" },
+            ).catch(() => {});
+            entry.alerted = true;
+          }
+        }
+      } catch {
+        // Ignore inspect failures — a dead/removed container may not inspect.
+      }
+    }
+
     _previousContainerStates[c.id] = c.state;
   }
   const currentIds = new Set(allContainers.map((c) => c.id));
   for (const id of Object.keys(_previousContainerStates)) if (!currentIds.has(id)) delete _previousContainerStates[id];
+  for (const id of Object.keys(_restartHistory)) if (!currentIds.has(id)) delete _restartHistory[id];
 }
 
 async function sampleTick() {
@@ -389,5 +446,6 @@ module.exports = {
   evaluateAndDetect,
   _runBroadcastOnce,
   _previousContainerStates,
+  _restartHistory,
   setMaintenanceMode,
 };
