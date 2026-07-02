@@ -9,7 +9,10 @@ function shouldSample({ now, lastSampleMs, clientCount }) {
 let _lastSampleMs = 0;
 let _latest = null; // { metrics, containerStats }
 let _recordMetrics = null; // set lazily; DI seam for tests
-let _maintenanceMode = false; // gate read by evaluateAndDetect; setter added in a later task
+let _maintenanceMode = false; // gate read by evaluateAndDetect
+function setMaintenanceMode(v) {
+  _maintenanceMode = !!v;
+}
 
 function cacheLatest(metrics, containerStats) {
   _latest = { metrics, containerStats };
@@ -386,4 +389,5 @@ module.exports = {
   evaluateAndDetect,
   _runBroadcastOnce,
   _previousContainerStates,
+  setMaintenanceMode,
 };

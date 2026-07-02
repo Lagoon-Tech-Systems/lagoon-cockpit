@@ -97,6 +97,9 @@ describe('C0 Task A3: cold-start storm guard prevents boot-time alert storm (G-T
   });
 
   afterEach(() => {
+    // Explicit reset so the module-level maintenance flag never leaks into other
+    // tests — jest.resetModules() below also isolates it, but be explicit per brief.
+    if (indexMod && typeof indexMod.setMaintenanceMode === 'function') indexMod.setMaintenanceMode(false);
     db.close();
     fs.rmSync(dir, { recursive: true, force: true });
     jest.dontMock('../src/stream/sse');
@@ -156,6 +159,43 @@ describe('C0 Task A3: cold-start storm guard prevents boot-time alert storm (G-T
     indexMod._resetSamplerState();
     indexMod._setRecorder(() => {});
     await indexMod.sampleTick();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(1);
+  });
+
+  test('maintenance mode suppresses alert evaluation until turned off', async () => {
+    const metricsState = { cpu: 10 }; // healthy at boot
+    jest.doMock('../src/system/metrics', () => ({
+      getSystemMetrics: () => ({
+        cpuPercent: metricsState.cpu,
+        memory: { percent: 10 },
+        disk: { percent: 10 },
+        load: { load1: 0.1 },
+      }),
+    }));
+    alerts = require('../src/system/alerts');
+    pushSpy = jest.fn();
+    alerts.init(db, async (...args) => { pushSpy(...args); });
+    alerts.createRule('cpu-high', 'cpu_percent', '>', 90, 0);
+    indexMod = require('../src/index');
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+
+    alerts.seedColdStart();
+    await indexMod.sampleTick(); // tick 1: baseline, low — nothing to suppress
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(0);
+
+    indexMod.setMaintenanceMode(true);
+    metricsState.cpu = 99; // a brand-new breach, but maintenance mode is on
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+    await indexMod.sampleTick(); // tick 2: still 0 — suppressed by maintenance mode
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(0);
+
+    indexMod.setMaintenanceMode(false);
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+    await indexMod.sampleTick(); // tick 3: fires once maintenance lifts — no cooldown blocks it
+                                 // since notifiedAt was never set during suppression
     expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(1);
   });
 });

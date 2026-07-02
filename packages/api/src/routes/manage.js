@@ -180,6 +180,10 @@ router.get("/api/maintenance", requireAuth, (req, res) => {
 
 router.post("/api/maintenance", requireAuth, requireRole("admin"), (req, res) => {
   req.app.locals.maintenanceMode = req.body.enabled === true;
+  // Lazy require (not top-of-file) to avoid a require cycle: index.js requires this
+  // router module during bootstrap, so requiring index.js back at module load time
+  // would deadlock/return a partial exports object.
+  require("../index").setMaintenanceMode(req.app.locals.maintenanceMode);
   auditLog(req.user.id, "maintenance.toggle", null, req.app.locals.maintenanceMode ? "enabled" : "disabled");
   res.json({ enabled: req.app.locals.maintenanceMode });
 });
