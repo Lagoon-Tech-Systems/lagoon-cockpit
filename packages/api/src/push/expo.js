@@ -52,7 +52,9 @@ function removeToken(token) {
 async function sendPushNotification(title, body, data = {}, opts = {}) {
   if (!expo || !db) return 0;
 
-  const tokens = db.prepare("SELECT token FROM push_tokens").all();
+  const tokens = opts.userId
+    ? db.prepare('SELECT token FROM push_tokens WHERE user_id = ?').all(opts.userId)
+    : db.prepare("SELECT token FROM push_tokens").all();
   if (tokens.length === 0) return 0;
 
   const messages = tokens

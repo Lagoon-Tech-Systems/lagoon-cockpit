@@ -25,4 +25,11 @@ describe('G-P1: per-token push budget caps storm', () => {
     for (let i = 0; i < 20; i++) queued += await expo.sendPushNotification('t', 'b', {});
     expect(queued).toBeLessThanOrEqual(expo.MAX_PUSHES_PER_WINDOW);
   });
+
+  test('opts.userId scopes recipients to that user', async () => {
+    db.prepare(`INSERT INTO push_tokens (token, user_id) VALUES ('ExponentPushToken[bbb]', 'u2')`).run();
+    expo._resetBudget();
+    const queued = await expo.sendPushNotification('t', 'b', {}, { userId: 'u2' });
+    expect(queued).toBe(1); // only u2's single token
+  });
 });
