@@ -27,11 +27,11 @@ router.post("/api/alerts/rules", requireAuth, requireRole("admin"), (req, res) =
       });
     }
 
-    const { name, metric, operator, threshold, durationSeconds } = req.body;
+    const { name, metric, operator, threshold, durationSeconds, severity } = req.body;
     if (!name || !metric || !operator || threshold === undefined) {
       return res.status(400).json({ error: "name, metric, operator, threshold required" });
     }
-    const rule = alertEngine.createRule(name, metric, operator, threshold, durationSeconds || 0);
+    const rule = alertEngine.createRule(name, metric, operator, threshold, durationSeconds || 0, severity || "warn");
     auditLog(req.user.id, "alert.rule.create", name);
     res.status(201).json(rule);
   } catch (err) {

@@ -156,7 +156,20 @@ function evaluateRules(metrics, containerStats) {
         }
       }
     } else {
-      // Clear active alert when condition resolves
+      // Condition resolved. Only fire a recovery push if the rule had actually
+      // notified while active (silent breaches that never crossed the
+      // duration/cooldown gate don't need a "resolved" push).
+      const existing = activeAlerts.get(rule.id);
+      if (existing && existing.notifiedAt > 0 && pushNotify) {
+        const msg = `${rule.metric} back to ${value}`;
+        db.prepare(
+          "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message, severity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ).run(rule.id, rule.name, rule.metric, value, rule.threshold, msg, "info");
+
+        pushNotify(`✓ ${rule.name} resolved`, msg, { type: "resolve", ruleId: rule.id }, { severity: "info" }).catch(
+          () => {},
+        );
+      }
       activeAlerts.delete(rule.id);
     }
   }

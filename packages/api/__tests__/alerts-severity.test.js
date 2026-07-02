@@ -57,4 +57,57 @@ describe('B2: severity threaded through createRule/evaluateRules + event + push'
     const row = db.prepare('SELECT * FROM alert_rules WHERE id = ?').get(rule.id);
     expect(row.severity).toBe('warn');
   });
+
+  test('resolving a previously-notified alert fires exactly one info recovery push', async () => {
+    alerts.createRule('cpu', 'cpu_percent', '>', 90, 0, 'warn');
+    alerts.evaluateRules(
+      { cpuPercent: 99, memory: { percent: 0 }, disk: { percent: 0 }, load: { load1: 0 } },
+      { stopped: 0 },
+    ); // fire
+
+    await new Promise((resolve) => setImmediate(resolve));
+    pushSpy.mockClear();
+
+    alerts.evaluateRules(
+      { cpuPercent: 10, memory: { percent: 0 }, disk: { percent: 0 }, load: { load1: 0 } },
+      { stopped: 0 },
+    ); // resolve
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(pushSpy).toHaveBeenCalledTimes(1);
+    expect(pushSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/resolved/i),
+      expect.any(String),
+      expect.objectContaining({ type: 'resolve' }),
+      expect.objectContaining({ severity: 'info' }),
+    );
+
+    const ev = db.prepare('SELECT * FROM alert_events ORDER BY id DESC').get();
+    expect(ev.severity).toBe('info');
+  });
+
+  test('a rule that trips but never notifies (long duration) resolving fires no push and no resolve event', async () => {
+    alerts.createRule('cpu-slow', 'cpu_percent', '>', 90, 3600, 'warn');
+    alerts.evaluateRules(
+      { cpuPercent: 99, memory: { percent: 0 }, disk: { percent: 0 }, load: { load1: 0 } },
+      { stopped: 0 },
+    ); // trips, but duration_seconds gate never met — never notifies
+
+    await new Promise((resolve) => setImmediate(resolve));
+    pushSpy.mockClear();
+
+    const eventCountBefore = db.prepare('SELECT COUNT(*) as c FROM alert_events').get().c;
+
+    alerts.evaluateRules(
+      { cpuPercent: 10, memory: { percent: 0 }, disk: { percent: 0 }, load: { load1: 0 } },
+      { stopped: 0 },
+    ); // resolve
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(pushSpy).not.toHaveBeenCalled();
+    const eventCountAfter = db.prepare('SELECT COUNT(*) as c FROM alert_events').get().c;
+    expect(eventCountAfter).toBe(eventCountBefore);
+  });
 });
