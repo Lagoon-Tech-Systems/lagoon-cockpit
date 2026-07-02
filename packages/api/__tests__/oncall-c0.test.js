@@ -16,6 +16,7 @@ describe('C0: alert evaluation fires with zero SSE clients', () => {
 
   beforeEach(() => {
     ({ db, dir } = freshDb());
+    require('../src/db/sqlite').runMigrations(db);
     jest.resetModules();
     // No SSE clients connected — the 2am case.
     jest.doMock('../src/stream/sse', () => ({
@@ -83,6 +84,7 @@ describe('C0 Task A3: cold-start storm guard prevents boot-time alert storm (G-T
 
   beforeEach(() => {
     ({ db, dir } = freshDb());
+    require('../src/db/sqlite').runMigrations(db);
     jest.resetModules();
     // No SSE clients connected — the 2am deploy case.
     jest.doMock('../src/stream/sse', () => ({

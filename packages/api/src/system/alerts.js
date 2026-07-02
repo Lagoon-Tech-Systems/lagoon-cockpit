@@ -53,18 +53,22 @@ function init(database, pushFn) {
 }
 
 /** Create an alert rule */
-function createRule(name, metric, operator, threshold, durationSeconds = 0) {
+function createRule(name, metric, operator, threshold, durationSeconds = 0, severity = "warn") {
   if (!db) throw new Error("Alert engine not initialized");
   const validMetrics = ["cpu_percent", "memory_percent", "disk_percent", "load_1", "container_stopped"];
   if (!validMetrics.includes(metric)) throw new Error(`Invalid metric: ${metric}`);
+  const validSeverities = ["info", "warn", "critical"];
+  if (!validSeverities.includes(severity)) throw new Error(`Invalid severity: ${severity}`);
   const count = db.prepare("SELECT COUNT(*) as c FROM alert_rules").get().c;
   if (count >= 100) throw new Error("Maximum 100 alert rules allowed");
 
   const result = db
-    .prepare("INSERT INTO alert_rules (name, metric, operator, threshold, duration_seconds) VALUES (?, ?, ?, ?, ?)")
-    .run(name, metric, operator, threshold, durationSeconds);
+    .prepare(
+      "INSERT INTO alert_rules (name, metric, operator, threshold, duration_seconds, severity) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .run(name, metric, operator, threshold, durationSeconds, severity);
 
-  return { id: result.lastInsertRowid, name, metric, operator, threshold, durationSeconds };
+  return { id: result.lastInsertRowid, name, metric, operator, threshold, durationSeconds, severity };
 }
 
 /** List all rules */
@@ -133,14 +137,22 @@ function evaluateRules(metrics, containerStats) {
       if (elapsed >= rule.duration_seconds && now - state.notifiedAt >= COOLDOWN_MS) {
         const message = `${rule.name}: ${rule.metric} is ${value} (threshold: ${rule.operator} ${rule.threshold})`;
 
-        db.prepare(
-          "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message) VALUES (?, ?, ?, ?, ?, ?)",
-        ).run(rule.id, rule.name, rule.metric, value, rule.threshold, message);
+        const result = db
+          .prepare(
+            "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message, severity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          )
+          .run(rule.id, rule.name, rule.metric, value, rule.threshold, message, rule.severity || "warn");
+        const eventId = result.lastInsertRowid;
 
         state.notifiedAt = now;
 
         if (pushNotify) {
-          pushNotify(`Alert: ${rule.name}`, message, { type: "alert_rule", ruleId: rule.id }).catch(() => {});
+          pushNotify(
+            `Alert: ${rule.name}`,
+            message,
+            { type: "alert_rule", ruleId: rule.id, eventId, severity: rule.severity || "warn" },
+            { severity: rule.severity || "warn" },
+          ).catch(() => {});
         }
       }
     } else {
