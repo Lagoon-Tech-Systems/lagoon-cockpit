@@ -97,7 +97,14 @@ function getAlertEvents(limit = 50) {
   return db.prepare("SELECT * FROM alert_events ORDER BY created_at DESC LIMIT ?").all(Math.min(limit, 500));
 }
 
-/** Evaluate all rules against current metrics */
+/**
+ * Evaluate all rules against current metrics.
+ *
+ * NOTE: at idle (no SSE client) the sampler ticks every 60s, so duration_seconds is
+ * effectively quantized to the sampler cadence: a rule with duration_seconds < 60 needs
+ * at least one full idle tick before it can fire, and a 90s rule needs ~120s. This is
+ * conservative (never pages early). Document in release notes; do not market "instant".
+ */
 function evaluateRules(metrics, containerStats) {
   if (!db) return;
 
