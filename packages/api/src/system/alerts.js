@@ -6,6 +6,20 @@
 let db = null;
 let pushNotify = null;
 const activeAlerts = new Map(); // ruleId -> { triggeredAt, count }
+let _coldStart = false; // one-shot baseline flag — see seedColdStart()
+
+/**
+ * Mark the next evaluateRules() pass as a cold-start baseline (G-T1).
+ * Call once at boot, right after init(). Any rule already breaching on that
+ * first pass is registered as already-notified (notifiedAt = now) so it stays
+ * silent for the normal cooldown window instead of paging immediately — this
+ * is what prevents a duplicate alert storm on a deploy made mid-breach.
+ * The flag is one-shot: it clears after the first pass completes, so a
+ * genuinely new incident that starts after boot still fires immediately.
+ */
+function seedColdStart() {
+  _coldStart = true;
+}
 
 function init(database, pushFn) {
   db = database;
@@ -103,8 +117,12 @@ function evaluateRules(metrics, containerStats) {
       const now = Date.now();
 
       if (!existing) {
-        // First time threshold is breached — start tracking
-        activeAlerts.set(rule.id, { triggeredAt: now, notifiedAt: 0 });
+        // First time threshold is breached — start tracking.
+        // On the first post-boot pass (_coldStart), seed notifiedAt = now so an
+        // already-breaching rule is treated as already-notified and the cooldown
+        // gate suppresses an immediate storm; a genuinely new breach (not cold
+        // start) still gets notifiedAt = 0 so it fires right away.
+        activeAlerts.set(rule.id, { triggeredAt: now, notifiedAt: _coldStart ? now : 0 });
       }
 
       const state = activeAlerts.get(rule.id);
@@ -130,6 +148,9 @@ function evaluateRules(metrics, containerStats) {
       activeAlerts.delete(rule.id);
     }
   }
+
+  // One-shot: the baseline pass is over — subsequent passes evaluate normally.
+  if (_coldStart) _coldStart = false;
 }
 
 function compare(value, operator, threshold) {
@@ -149,4 +170,13 @@ function compare(value, operator, threshold) {
   }
 }
 
-module.exports = { init, createRule, listRules, deleteRule, toggleRule, getAlertEvents, evaluateRules };
+module.exports = {
+  init,
+  createRule,
+  listRules,
+  deleteRule,
+  toggleRule,
+  getAlertEvents,
+  evaluateRules,
+  seedColdStart,
+};

@@ -191,6 +191,10 @@ function bootstrap() {
     console.error("[COCKPIT] rollup boot catch-up error:", err.message);
   }
   alertEngine.init(db, sendPushNotification);
+  // Cold-start storm guard (G-T1): treat any rule already breaching on the very
+  // first evaluateRules() pass as a baseline, not a new incident, so a deploy
+  // made mid-breach doesn't immediately re-page on-call.
+  alertEngine.seedColdStart();
   webhooks.init(db);
   scheduler.init(db, auditLog);
 

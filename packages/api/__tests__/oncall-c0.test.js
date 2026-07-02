@@ -78,6 +78,88 @@ test('broadcastLoop still emits the same SSE events when a client is connected (
   expect(events).toEqual(['containers', 'metrics']); // exactly the SSE payloads, no alert side-effects added/removed
 });
 
+describe('C0 Task A3: cold-start storm guard prevents boot-time alert storm (G-T1)', () => {
+  let db, dir, indexMod, alerts, pushSpy;
+
+  beforeEach(() => {
+    ({ db, dir } = freshDb());
+    jest.resetModules();
+    // No SSE clients connected — the 2am deploy case.
+    jest.doMock('../src/stream/sse', () => ({
+      getClientCount: jest.fn(() => 0),
+      broadcast: jest.fn(),
+      closeAllClients: jest.fn(),
+    }));
+    jest.doMock('../src/docker/containers', () => ({
+      listContainers: jest.fn(async () => [{ id: 'c1', name: 'web', state: 'running' }]),
+      inspectContainer: jest.fn(async () => ({ State: { RestartCount: 0 } })),
+    }));
+  });
+
+  afterEach(() => {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+    jest.dontMock('../src/stream/sse');
+    jest.dontMock('../src/docker/containers');
+    jest.dontMock('../src/system/metrics');
+    jest.resetModules();
+  });
+
+  test('a rule already breaching at boot is suppressed through the cooldown, not just the first tick', async () => {
+    // Force a rule that's already breaching at the moment the process comes up.
+    jest.doMock('../src/system/metrics', () => ({
+      getSystemMetrics: () => ({ cpuPercent: 99, memory: { percent: 10 }, disk: { percent: 10 }, load: { load1: 0.1 } }),
+    }));
+    alerts = require('../src/system/alerts');
+    pushSpy = jest.fn();
+    alerts.init(db, async (...args) => { pushSpy(...args); });
+    alerts.createRule('cpu-high', 'cpu_percent', '>', 90, 0);
+    indexMod = require('../src/index');
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+
+    alerts.seedColdStart(); // called once at boot, mirroring index.js bootstrap
+    await indexMod.sampleTick(); // baseline tick: already-breaching rule must not fire
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(0);
+
+    // Clear the sampler throttle only (not the alert cooldown) and sample again —
+    // the storm is prevented outright, not merely delayed one tick.
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+    await indexMod.sampleTick();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(0);
+  });
+
+  test('a new breach that starts after the baseline tick fires immediately (guard does not delay genuine incidents)', async () => {
+    const metricsState = { cpu: 10 }; // healthy at boot
+    jest.doMock('../src/system/metrics', () => ({
+      getSystemMetrics: () => ({
+        cpuPercent: metricsState.cpu,
+        memory: { percent: 10 },
+        disk: { percent: 10 },
+        load: { load1: 0.1 },
+      }),
+    }));
+    alerts = require('../src/system/alerts');
+    pushSpy = jest.fn();
+    alerts.init(db, async (...args) => { pushSpy(...args); });
+    alerts.createRule('cpu-high', 'cpu_percent', '>', 90, 0);
+    indexMod = require('../src/index');
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+
+    alerts.seedColdStart();
+    await indexMod.sampleTick(); // baseline tick: not breaching, nothing to suppress
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(0);
+
+    metricsState.cpu = 99; // a genuinely new incident after boot
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+    await indexMod.sampleTick();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(1);
+  });
+});
+
 test('evaluateAndDetect broadcasts an SSE alert on container state change with zero SSE clients (C0 review fix wave 1)', async () => {
   jest.resetModules();
   // Zero SSE clients throughout — the mobile Alerts tab's only data source must still fire.
