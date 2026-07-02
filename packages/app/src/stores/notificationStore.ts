@@ -30,6 +30,25 @@ export const useNotificationStore = create<NotificationState>((set) => ({
           name: 'default',
           importance: Notifications.AndroidImportance.MAX,
         });
+
+        // Create severity-based notification channels
+        await Notifications.setNotificationChannelAsync('cockpit-critical', {
+          name: 'Critical',
+          importance: Notifications.AndroidImportance.MAX,
+          sound: 'default',
+          vibrationPattern: [0, 250, 250, 250],
+        });
+
+        await Notifications.setNotificationChannelAsync('cockpit-default', {
+          name: 'Alerts',
+          importance: Notifications.AndroidImportance.HIGH,
+          sound: 'default',
+        });
+
+        await Notifications.setNotificationChannelAsync('cockpit-info', {
+          name: 'Info',
+          importance: Notifications.AndroidImportance.LOW,
+        });
       }
 
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
