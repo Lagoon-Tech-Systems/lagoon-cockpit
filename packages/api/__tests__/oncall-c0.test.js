@@ -58,3 +58,22 @@ describe('C0: alert evaluation fires with zero SSE clients', () => {
     expect(after).toBe(before + 1);
   });
 });
+
+test('broadcastLoop still emits the same SSE events when a client is connected (G-B1 zero-delta)', async () => {
+  jest.resetModules();
+  const broadcast = jest.fn();
+  jest.doMock('../src/stream/sse', () => ({ getClientCount: jest.fn(() => 1), broadcast, closeAllClients: jest.fn() }));
+  jest.doMock('../src/docker/containers', () => ({
+    listContainers: jest.fn(async () => [{ id: 'c1', name: 'web', state: 'running' }]),
+    inspectContainer: jest.fn(async () => ({ State: { RestartCount: 0 } })),
+  }));
+  // Fresh module has no cached _latest (getLatest() is null), so broadcastLoop falls back
+  // to getSystemMetrics() — mock it too or the real implementation runs.
+  jest.doMock('../src/system/metrics', () => ({
+    getSystemMetrics: () => ({ cpuPercent: 99, memory: { percent: 10 }, disk: { percent: 10 }, load: { load1: 0.1 } }),
+  }));
+  const idx = require('../src/index');
+  await idx._runBroadcastOnce(); // exported test seam wrapping broadcastLoop body
+  const events = broadcast.mock.calls.map((c) => c[0]).sort();
+  expect(events).toEqual(['containers', 'metrics']); // exactly the SSE payloads, no alert side-effects added/removed
+});

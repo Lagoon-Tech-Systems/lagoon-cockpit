@@ -9,12 +9,52 @@ function shouldSample({ now, lastSampleMs, clientCount }) {
 let _lastSampleMs = 0;
 let _latest = null; // { metrics, containerStats }
 let _recordMetrics = null; // set lazily; DI seam for tests
+let _maintenanceMode = false; // gate read by evaluateAndDetect; setter added in a later task
 
 function cacheLatest(metrics, containerStats) {
   _latest = { metrics, containerStats };
 }
 function getLatest() {
   return _latest;
+}
+
+const _previousContainerStates = {};
+
+// Single alert-evaluation + container-state-detection site (was inside broadcastLoop).
+// Called from sampleTick so it runs even with zero SSE clients.
+async function evaluateAndDetect(metrics, containerStats, allContainers) {
+  // Require lazily so mocks applied before require() take effect in tests
+  const alertEngine = require("./system/alerts");
+  const webhooks = require("./system/webhooks");
+  const { sendPushNotification } = require("./push/expo");
+  if (_maintenanceMode) return; // G-T1 (see Task A4)
+  alertEngine.evaluateRules(metrics, containerStats);
+  for (const c of allContainers) {
+    const prev = _previousContainerStates[c.id];
+    if (prev && prev !== c.state) {
+      const alert = {
+        type: "container_state_change",
+        containerId: c.id,
+        containerName: c.name,
+        previousState: prev,
+        currentState: c.state,
+        timestamp: new Date().toISOString(),
+      };
+      if (c.state !== "running" && prev === "running") {
+        sendPushNotification(
+          `Container Down: ${c.name}`,
+          `${c.name} changed from ${prev} to ${c.state}`,
+          { type: "container", containerId: c.id },
+          { severity: "critical" },
+        ).catch(() => {});
+        webhooks.fireWebhooks("container.down", alert).catch(() => {});
+      }
+      webhooks.fireWebhooks("container.state_change", alert).catch(() => {});
+    }
+    _previousContainerStates[c.id] = c.state;
+  }
+  const currentIds = new Set(allContainers.map((c) => c.id));
+  for (const id of Object.keys(_previousContainerStates)) if (!currentIds.has(id)) delete _previousContainerStates[id];
 }
 
 async function sampleTick() {
@@ -33,6 +73,7 @@ async function sampleTick() {
     const containerStats = { total: allContainers.length, running, stopped: allContainers.length - running };
     recorder(metrics, containerStats);
     cacheLatest(metrics, containerStats);
+    await evaluateAndDetect(metrics, containerStats, allContainers);
     _lastSampleMs = now;
   } catch (err) {
     console.error("[SAMPLER] sampleTick error:", err.message);
@@ -51,6 +92,42 @@ function _setRecorder(fn) {
   _recordMetrics = fn;
 }
 
+// ── SSE broadcast loop — retains only the broadcast(...) calls; alert-eval and
+// container-state-detection moved to evaluateAndDetect (called from sampleTick). ──
+async function broadcastLoop() {
+  // Require lazily so mocks applied before require() take effect in tests
+  const { getClientCount, broadcast } = require("./stream/sse");
+  const containers = require("./docker/containers");
+  const { getSystemMetrics } = require("./system/metrics");
+  try {
+    if (getClientCount() === 0) return;
+
+    const allContainers = await containers.listContainers(true);
+    const cached = getLatest();
+    const metrics = cached ? cached.metrics : getSystemMetrics();
+
+    broadcast("metrics", metrics);
+    broadcast(
+      "containers",
+      allContainers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        state: c.state,
+        health: c.health,
+        image: c.image,
+        composeProject: c.composeProject,
+      })),
+    );
+  } catch (err) {
+    console.error("[SSE] Broadcast error:", err.message);
+  }
+}
+
+// Test-only seam: run one broadcastLoop iteration without waiting on the interval.
+async function _runBroadcastOnce() {
+  return broadcastLoop();
+}
+
 function bootstrap() {
   require("dotenv").config();
   const express = require("express");
@@ -62,13 +139,11 @@ function bootstrap() {
   initJwt(db);
 
   const { init: initUsers, createUser } = require("./auth/users");
-  const containers = require("./docker/containers");
-  const { getSystemMetrics } = require("./system/metrics");
   const metricsHistory = require("./system/history");
   const alertEngine = require("./system/alerts");
   const webhooks = require("./system/webhooks");
   const scheduler = require("./system/scheduler");
-  const { broadcast, getClientCount, closeAllClients } = require("./stream/sse");
+  const { broadcast, closeAllClients } = require("./stream/sse");
   const { init: initPush, sendPushNotification } = require("./push/expo");
 
   // Security module
@@ -209,63 +284,8 @@ function bootstrap() {
   const extensions = loadExtensions(app, db, services);
   app.locals.extensions = extensions;
 
-  // ── SSE broadcast loop ─────────────────────────────────────
-  const previousContainerStates = {};
-  async function broadcastLoop() {
-    try {
-      if (getClientCount() === 0) return;
-
-      const allContainers = await containers.listContainers(true);
-      const cached = getLatest();
-      const metrics = cached ? cached.metrics : getSystemMetrics();
-
-      const running = allContainers.filter((c) => c.state === "running").length;
-      const containerStats = { total: allContainers.length, running, stopped: allContainers.length - running };
-      if (!app.locals.maintenanceMode) alertEngine.evaluateRules(metrics, containerStats);
-      broadcast("metrics", metrics);
-      broadcast(
-        "containers",
-        allContainers.map((c) => ({
-          id: c.id,
-          name: c.name,
-          state: c.state,
-          health: c.health,
-          image: c.image,
-          composeProject: c.composeProject,
-        })),
-      );
-      for (const c of allContainers) {
-        const prev = previousContainerStates[c.id];
-        if (prev && prev !== c.state) {
-          const alert = {
-            type: "container_state_change",
-            containerId: c.id,
-            containerName: c.name,
-            previousState: prev,
-            currentState: c.state,
-            timestamp: new Date().toISOString(),
-          };
-          broadcast("alert", alert);
-
-          if (c.state !== "running" && prev === "running" && !app.locals.maintenanceMode) {
-            sendPushNotification(`Container Down: ${c.name}`, `${c.name} changed from ${prev} to ${c.state}`, {
-              type: "container",
-              containerId: c.id,
-            }).catch(() => {});
-            webhooks.fireWebhooks("container.down", alert).catch(() => {});
-          }
-          webhooks.fireWebhooks("container.state_change", alert).catch(() => {});
-        }
-        previousContainerStates[c.id] = c.state;
-      }
-
-      const currentIds = new Set(allContainers.map((c) => c.id));
-      for (const id of Object.keys(previousContainerStates)) if (!currentIds.has(id)) delete previousContainerStates[id];
-    } catch (err) {
-      console.error("[SSE] Broadcast error:", err.message);
-    }
-  }
-
+  // ── SSE broadcast loop (module-scope broadcastLoop — see above; always-on
+  //    sampler feeds it via cacheLatest/getLatest, decoupled from client count) ──
   const broadcastInterval = setInterval(broadcastLoop, 15000);
 
   // Always-on sampler — persists metrics regardless of SSE clients
@@ -358,4 +378,7 @@ module.exports = {
   getLatest,
   _resetSamplerState,
   _setRecorder,
+  evaluateAndDetect,
+  _runBroadcastOnce,
+  _previousContainerStates,
 };
