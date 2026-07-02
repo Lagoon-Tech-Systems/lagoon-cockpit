@@ -97,6 +97,12 @@ function getAlertEvents(limit = 50) {
   return db.prepare("SELECT * FROM alert_events ORDER BY created_at DESC LIMIT ?").all(Math.min(limit, 500));
 }
 
+/** Get a single alert event by id, or undefined if not found / db not initialized */
+function getAlertEvent(id) {
+  if (!db) return undefined;
+  return db.prepare("SELECT * FROM alert_events WHERE id = ?").get(id);
+}
+
 /**
  * Evaluate all rules against current metrics.
  *
@@ -272,6 +278,7 @@ module.exports = {
   deleteRule,
   toggleRule,
   getAlertEvents,
+  getAlertEvent,
   evaluateRules,
   seedColdStart,
 };

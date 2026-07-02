@@ -68,6 +68,14 @@ router.get("/api/alerts/events", requireAuth, (req, res) => {
   res.json({ events: alertEngine.getAlertEvents(limit) });
 });
 
+router.get("/api/alerts/events/:id", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "invalid id" });
+  const event = alertEngine.getAlertEvent(id);
+  if (!event) return res.status(404).json({ error: "not found" });
+  res.json({ event });
+});
+
 // ── Webhooks ─────────────────────────────────────────────
 router.get("/api/webhooks", requireAuth, requireRole("admin"), (_req, res) => {
   res.json({ webhooks: webhooks.listWebhooks() });
