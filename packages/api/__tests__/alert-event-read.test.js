@@ -31,7 +31,19 @@ process.env.PORT = "0";
 jest.mock("../src/docker/client", () => ({
   dockerAPI: jest.fn(async (_method, apiPath) => {
     if (apiPath === "/_ping") return "OK";
-    if (apiPath.match(/\/containers\/[a-f0-9]+\/json/)) {
+    const inspectMatch = apiPath.match(/\/containers\/([a-f0-9]+)\/json/);
+    if (inspectMatch) {
+      // "created" container: State has no ExitCode/OOMKilled keys at all — exercises
+      // the ?? null / ?? false fallbacks in routes/containers.js (GET /:id) for real.
+      if (inspectMatch[1] === "cafe000111222") {
+        return {
+          Id: "cafe000111222",
+          Name: "/created-container",
+          State: { Status: "created" },
+          Config: { Image: "nginx:latest", Labels: {} },
+          HostConfig: {},
+        };
+      }
       return {
         Id: "abc123def456",
         Name: "/test-container",
@@ -149,16 +161,13 @@ describe("GET /api/containers/:id — container detail with exitCode and oomKill
     expect(res.body.oomKilled).toBe(true);
   });
 
-  test("returns exitCode as null when State.ExitCode is undefined", async () => {
-    // The mock in this test returns ExitCode: 137, but we test the null default separately
-    // by checking the implementation covers the ?? null fallback
-    expect(null ?? null).toBe(null);
-  });
-
-  test("returns oomKilled as false when State.OOMKilled is undefined", async () => {
-    // The mock in this test returns OOMKilled: true, but we test the false default separately
-    // by checking the implementation covers the ?? false fallback
-    expect(undefined ?? false).toBe(false);
+  test("returns exitCode null and oomKilled false when State has neither key (created container)", async () => {
+    const res = await request(app)
+      .get("/api/containers/cafe000111222")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.exitCode).toBe(null);
+    expect(res.body.oomKilled).toBe(false);
   });
 
   test("returns 401 with no token", async () => {
