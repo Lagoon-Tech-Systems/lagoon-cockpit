@@ -1,9 +1,12 @@
 const fs = require('fs'); const os = require('os'); const path = require('path');
 const Database = require('better-sqlite3');
 
+const sent = [];
+
 describe('G-P1: per-token push budget caps storm', () => {
   let db, dir, expo;
   beforeEach(() => {
+    sent.length = 0;
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'cockpit-push-'));
     dir = d; db = new Database(path.join(d, 'test.db'));
     db.exec(`CREATE TABLE push_tokens (token TEXT PRIMARY KEY, user_id TEXT, server_name TEXT, created_at DATETIME, updated_at DATETIME);`);
@@ -12,7 +15,7 @@ describe('G-P1: per-token push budget caps storm', () => {
     jest.doMock('expo-server-sdk', () => ({ Expo: class {
       static isExpoPushToken() { return true; }
       chunkPushNotifications(m) { return [m]; }
-      async sendPushNotificationsAsync() { return []; }
+      async sendPushNotificationsAsync(chunk) { sent.push(...chunk); return chunk.map(() => ({ status: 'ok' })); }
     } }));
     expo = require('../src/push/expo');
     expo.init(db);
@@ -31,5 +34,32 @@ describe('G-P1: per-token push budget caps storm', () => {
     expo._resetBudget();
     const queued = await expo.sendPushNotification('t', 'b', {}, { userId: 'u2' });
     expect(queued).toBe(1); // only u2's single token
+  });
+
+  test('severity=critical maps to time-sensitive + cockpit-critical channel', async () => {
+    await expo.sendPushNotification('t', 'b', {}, { severity: 'critical', userId: 'u1' });
+    expect(sent[0]).toMatchObject({
+      interruptionLevel: 'time-sensitive',
+      channelId: 'cockpit-critical',
+      sound: 'default',
+    });
+  });
+
+  test('default/unknown severity maps to warn; info maps to passive + null sound', async () => {
+    await expo.sendPushNotification('t', 'b', {}, { userId: 'u1' });
+    expect(sent[0]).toMatchObject({
+      interruptionLevel: 'active',
+      channelId: 'cockpit-default',
+      sound: 'default',
+    });
+
+    expo._resetBudget();
+    sent.length = 0;
+    await expo.sendPushNotification('t', 'b', {}, { severity: 'info', userId: 'u1' });
+    expect(sent[0]).toMatchObject({
+      interruptionLevel: 'passive',
+      channelId: 'cockpit-info',
+      sound: null,
+    });
   });
 });

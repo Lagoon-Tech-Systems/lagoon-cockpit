@@ -10,6 +10,13 @@ const _budget = new Map();             // token -> number[] (timestamps)
 
 function _resetBudget() { _budget.clear(); }
 
+// Severity → Expo delivery mapping (interruptionLevel / channelId / sound)
+const SEVERITY_DELIVERY = {
+  critical: { interruptionLevel: 'time-sensitive', channelId: 'cockpit-critical', sound: 'default' },
+  warn:     { interruptionLevel: 'active',         channelId: 'cockpit-default',  sound: 'default' },
+  info:     { interruptionLevel: 'passive',        channelId: 'cockpit-info',     sound: null },
+};
+
 function _withinBudget(token) {
   const now = Date.now();
   const hits = (_budget.get(token) || []).filter((t) => now - t < WINDOW_MS);
@@ -57,15 +64,19 @@ async function sendPushNotification(title, body, data = {}, opts = {}) {
     : db.prepare("SELECT token FROM push_tokens").all();
   if (tokens.length === 0) return 0;
 
+  const sev = SEVERITY_DELIVERY[opts.severity] || SEVERITY_DELIVERY.warn;
+
   const messages = tokens
     .filter((t) => Expo.isExpoPushToken(t.token))
     .filter((t) => _withinBudget(t.token))
     .map((t) => ({
       to: t.token,
-      sound: "default",
       title,
       body,
       data,
+      sound: sev.sound,
+      interruptionLevel: sev.interruptionLevel,
+      channelId: sev.channelId,
     }));
 
   if (messages.length === 0) return 0;
@@ -88,4 +99,4 @@ async function sendPushNotification(title, body, data = {}, opts = {}) {
   return messages.length;
 }
 
-module.exports = { init, registerToken, removeToken, sendPushNotification, MAX_PUSHES_PER_WINDOW, _resetBudget };
+module.exports = { init, registerToken, removeToken, sendPushNotification, MAX_PUSHES_PER_WINDOW, _resetBudget, SEVERITY_DELIVERY };
