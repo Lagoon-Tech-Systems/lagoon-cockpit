@@ -81,6 +81,7 @@ function AppContent() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary, headerTitleStyle: { fontFamily: 'Inter_700Bold' } }} />
           <Stack.Screen name="servers" options={{ headerShown: true, title: 'All Servers', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary, headerTitleStyle: { fontFamily: 'Inter_700Bold' } }} />
+          <Stack.Screen name="events/[eventId]" options={{ headerShown: true, title: 'Alert', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary, headerTitleStyle: { fontFamily: 'Inter_700Bold' } }} />
         </Stack>
       </SafeAreaView>
     </EditionProvider>

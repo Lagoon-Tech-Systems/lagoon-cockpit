@@ -12,6 +12,10 @@ import { useNotificationStore } from '../stores/notificationStore';
  * - Listens for incoming notifications and tap responses
  * - Re-registers when the active server profile changes
  */
+// Module-level guard: ensures the cold-start deep link is only consumed once,
+// even if this hook re-mounts (e.g. Fast Refresh) or the live listener also fires.
+let handledColdStart = false;
+
 export function useNotifications() {
   const router = useRouter();
   const accessToken = useServerStore((s) => s.accessToken);
@@ -52,7 +56,12 @@ export function useNotifications() {
           if (data.type === 'container' && data.containerId) {
             router.push(`/(tabs)/containers`);
           } else if (data.type === 'alert_rule') {
-            router.push(`/(tabs)/alerts`);
+            handledColdStart = true;
+            if (data.eventId) {
+              router.push(`/events/${data.eventId}`);
+            } else {
+              router.push(`/(tabs)/alerts`);
+            }
           } else if (data.type === 'ssl') {
             router.push(`/(tabs)/monitoring`);
           } else {
@@ -73,5 +82,28 @@ export function useNotifications() {
         responseListenerRef.current.remove();
       }
     };
+  }, [router]);
+
+  // Cold-start handler: if the app was launched (from killed state) by tapping
+  // a notification, the live response listener above never fires for that tap —
+  // it's only delivered via getLastNotificationResponseAsync(). Runs once on
+  // mount; guarded so it can't double-navigate if the live listener also fires
+  // for the same tap (observed on some Android OEMs).
+  useEffect(() => {
+    if (handledColdStart) return;
+
+    (async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (handledColdStart) return;
+        const data: any = last?.notification?.request?.content?.data;
+        if (data?.type === 'alert_rule' && data?.eventId) {
+          handledColdStart = true;
+          router.push(`/events/${data.eventId}`);
+        }
+      } catch (err) {
+        console.error('[PUSH] Cold-start navigation error:', err);
+      }
+    })();
   }, [router]);
 }
