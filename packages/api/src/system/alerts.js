@@ -130,6 +130,13 @@ function evaluateRules(metrics, containerStats) {
       }
 
       const state = activeAlerts.get(rule.id);
+
+      // Re-triggering (or a still-fresh entry) means the alert is not clearing
+      // right now — drop any in-progress clear tracking so a later dip back
+      // toward the clear band starts its clear timer/tick count from scratch.
+      delete state.clearingSince;
+      state.clearTicks = 0;
+
       const elapsed = (now - state.triggeredAt) / 1000;
 
       // Check if duration threshold is met and cooldown has passed (15 min)
@@ -156,26 +163,82 @@ function evaluateRules(metrics, containerStats) {
         }
       }
     } else {
-      // Condition resolved. Only fire a recovery push if the rule had actually
-      // notified while active (silent breaches that never crossed the
-      // duration/cooldown gate don't need a "resolved" push).
+      // Not currently past the fire threshold. An active alert only resolves
+      // once the metric has genuinely cleared — either past the hysteresis
+      // band for a set duration (continuous gauges), or for K consecutive
+      // ticks (== rules and the discrete container_stopped count) — so a
+      // value oscillating right at the boundary doesn't re-arm and re-fire.
       const existing = activeAlerts.get(rule.id);
-      if (existing && existing.notifiedAt > 0 && pushNotify) {
-        const msg = `${rule.metric} back to ${value}`;
-        db.prepare(
-          "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message, severity) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        ).run(rule.id, rule.name, rule.metric, value, rule.threshold, msg, "info");
+      if (existing) {
+        const now = Date.now();
+        const useDebounce = rule.operator === "==" || rule.metric === "container_stopped";
 
-        pushNotify(`✓ ${rule.name} resolved`, msg, { type: "resolve", ruleId: rule.id }, { severity: "info" }).catch(
-          () => {},
-        );
+        if (useDebounce) {
+          existing.clearTicks = (existing.clearTicks || 0) + 1;
+          if (existing.clearTicks >= 2) {
+            resolveAlert(rule, value, existing);
+          }
+        } else if (inClearZone(rule, value)) {
+          if (existing.clearingSince == null) existing.clearingSince = now;
+          const clearDurationMs = (rule.clear_duration_seconds || 0) * 1000;
+          if (now - existing.clearingSince >= clearDurationMs) {
+            resolveAlert(rule, value, existing);
+          }
+        } else {
+          // Dipped below the fire threshold but hasn't crossed into the
+          // clear band yet — keep the alert active and untouched.
+          delete existing.clearingSince;
+        }
       }
-      activeAlerts.delete(rule.id);
+      // Rules with no active entry that aren't triggered need no action.
     }
   }
 
   // One-shot: the baseline pass is over — subsequent passes evaluate normally.
   if (_coldStart) _coldStart = false;
+}
+
+/**
+ * Resolve an active alert: fire the recovery push + 'info' resolve event
+ * (only if the rule had actually notified while active — a silent breach
+ * that never crossed the duration/cooldown gate doesn't need a "resolved"
+ * push), then drop it from activeAlerts so a later breach starts fresh.
+ */
+function resolveAlert(rule, value, state) {
+  if (state.notifiedAt > 0 && pushNotify) {
+    const msg = `${rule.metric} back to ${value}`;
+    db.prepare(
+      "INSERT INTO alert_events (rule_id, rule_name, metric, value, threshold, message, severity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(rule.id, rule.name, rule.metric, value, rule.threshold, msg, "info");
+
+    pushNotify(`✓ ${rule.name} resolved`, msg, { type: "resolve", ruleId: rule.id }, { severity: "info" }).catch(
+      () => {},
+    );
+  }
+  activeAlerts.delete(rule.id);
+}
+
+/**
+ * True if `value` has crossed back into the "clear" zone for `rule` — the
+ * derived band (or explicit clear_threshold override) that a metric must
+ * cross past before an active alert is allowed to resolve. Without this
+ * band, a value oscillating right at the fire threshold re-arms and
+ * re-fires on every tick.
+ *
+ * For '==' rules there is no meaningful band (any non-equal value is
+ * "not triggered"); callers fall back to the K-consecutive-tick debounce
+ * for those instead of this band (the boolean returned here is a sentinel,
+ * not used to gate resolution for '==').
+ */
+function inClearZone(rule, value) {
+  const isUpper = ['>', '>='].includes(rule.operator); // alert when value high
+  const isLower = ['<', '<='].includes(rule.operator); // alert when value low
+  if (rule.operator === '==') return value !== rule.threshold; // handled by debounce below
+  const band = rule.clear_threshold != null
+    ? rule.clear_threshold
+    : (isUpper ? rule.threshold - Math.max(rule.threshold * 0.05, 1)
+               : rule.threshold + Math.max(rule.threshold * 0.05, 1));
+  return isUpper ? value < band : isLower ? value > band : true;
 }
 
 function compare(value, operator, threshold) {
