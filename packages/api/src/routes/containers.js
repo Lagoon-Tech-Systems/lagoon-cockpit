@@ -24,7 +24,12 @@ router.get("/api/containers/:id", requireAuth, validateContainerId, async (req, 
       containers.inspectContainer(req.params.id),
       containers.getContainerStats(req.params.id).catch(() => null),
     ]);
-    res.json({ container: info, stats });
+    res.json({
+      container: info,
+      stats,
+      exitCode: info?.State?.ExitCode ?? null,
+      oomKilled: info?.State?.OOMKilled ?? false,
+    });
   } catch (err) {
     res.status(err.statusCode === 404 ? 404 : 500).json({ error: safeError(err, "Container not found") });
   }
