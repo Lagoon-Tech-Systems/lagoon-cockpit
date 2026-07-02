@@ -3,6 +3,20 @@ const { Expo } = require("expo-server-sdk");
 let expo = null;
 let db = null;
 
+// Per-token rolling-window push budget
+const MAX_PUSHES_PER_WINDOW = 10;      // per token
+const WINDOW_MS = 60 * 60 * 1000;      // rolling 1h
+const _budget = new Map();             // token -> number[] (timestamps)
+
+function _resetBudget() { _budget.clear(); }
+
+function _withinBudget(token) {
+  const now = Date.now();
+  const hits = (_budget.get(token) || []).filter((t) => now - t < WINDOW_MS);
+  if (hits.length >= MAX_PUSHES_PER_WINDOW) { _budget.set(token, hits); return false; }
+  hits.push(now); _budget.set(token, hits); return true;
+}
+
 /** Initialize push module */
 function init(database) {
   db = database;
@@ -35,14 +49,15 @@ function removeToken(token) {
 }
 
 /** Send a push notification to all registered tokens */
-async function sendPushNotification(title, body, data = {}) {
-  if (!expo || !db) return;
+async function sendPushNotification(title, body, data = {}, opts = {}) {
+  if (!expo || !db) return 0;
 
   const tokens = db.prepare("SELECT token FROM push_tokens").all();
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) return 0;
 
   const messages = tokens
     .filter((t) => Expo.isExpoPushToken(t.token))
+    .filter((t) => _withinBudget(t.token))
     .map((t) => ({
       to: t.token,
       sound: "default",
@@ -51,7 +66,7 @@ async function sendPushNotification(title, body, data = {}) {
       data,
     }));
 
-  if (messages.length === 0) return;
+  if (messages.length === 0) return 0;
 
   const chunks = expo.chunkPushNotifications(messages);
   for (const chunk of chunks) {
@@ -67,6 +82,8 @@ async function sendPushNotification(title, body, data = {}) {
       console.error("[PUSH] Failed to send:", err.message);
     }
   }
+
+  return messages.length;
 }
 
-module.exports = { init, registerToken, removeToken, sendPushNotification };
+module.exports = { init, registerToken, removeToken, sendPushNotification, MAX_PUSHES_PER_WINDOW, _resetBudget };
