@@ -77,3 +77,39 @@ test('broadcastLoop still emits the same SSE events when a client is connected (
   const events = broadcast.mock.calls.map((c) => c[0]).sort();
   expect(events).toEqual(['containers', 'metrics']); // exactly the SSE payloads, no alert side-effects added/removed
 });
+
+test('evaluateAndDetect broadcasts an SSE alert on container state change with zero SSE clients (C0 review fix wave 1)', async () => {
+  jest.resetModules();
+  // Zero SSE clients throughout — the mobile Alerts tab's only data source must still fire.
+  const broadcast = jest.fn();
+  jest.doMock('../src/stream/sse', () => ({ getClientCount: jest.fn(() => 0), broadcast, closeAllClients: jest.fn() }));
+  const listContainers = jest
+    .fn()
+    .mockResolvedValueOnce([{ id: 'c1', name: 'web', state: 'running' }])
+    .mockResolvedValueOnce([{ id: 'c1', name: 'web', state: 'exited' }]);
+  jest.doMock('../src/docker/containers', () => ({
+    listContainers,
+    inspectContainer: jest.fn(async () => ({ State: { RestartCount: 0 } })),
+  }));
+  jest.doMock('../src/system/metrics', () => ({
+    getSystemMetrics: () => ({ cpuPercent: 10, memory: { percent: 10 }, disk: { percent: 10 }, load: { load1: 0.1 } }),
+  }));
+  const idx = require('../src/index');
+
+  // Tick 1: establish 'running' as the previous state. Reset sampler state between ticks
+  // (rather than bumping clientCount to 1) to keep the scenario at true zero-client throughout,
+  // clearing the 60s zero-client throttle so the second tick isn't a same-instant early-return.
+  idx._resetSamplerState();
+  idx._setRecorder(() => {});
+  await idx.sampleTick();
+
+  // Tick 2: running -> exited state change.
+  idx._resetSamplerState();
+  idx._setRecorder(() => {});
+  await idx.sampleTick();
+
+  expect(broadcast).toHaveBeenCalledWith(
+    'alert',
+    expect.objectContaining({ type: 'container_state_change', containerId: 'c1', currentState: 'exited' }),
+  );
+});

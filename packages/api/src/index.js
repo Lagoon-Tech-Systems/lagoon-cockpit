@@ -27,8 +27,8 @@ async function evaluateAndDetect(metrics, containerStats, allContainers) {
   const alertEngine = require("./system/alerts");
   const webhooks = require("./system/webhooks");
   const { sendPushNotification } = require("./push/expo");
-  if (_maintenanceMode) return; // G-T1 (see Task A4)
-  alertEngine.evaluateRules(metrics, containerStats);
+  const { broadcast } = require("./stream/sse");
+  if (!_maintenanceMode) alertEngine.evaluateRules(metrics, containerStats);
   for (const c of allContainers) {
     const prev = _previousContainerStates[c.id];
     if (prev && prev !== c.state) {
@@ -40,7 +40,8 @@ async function evaluateAndDetect(metrics, containerStats, allContainers) {
         currentState: c.state,
         timestamp: new Date().toISOString(),
       };
-      if (c.state !== "running" && prev === "running") {
+      broadcast("alert", alert);
+      if (!_maintenanceMode && c.state !== "running" && prev === "running") {
         sendPushNotification(
           `Container Down: ${c.name}`,
           `${c.name} changed from ${prev} to ${c.state}`,
