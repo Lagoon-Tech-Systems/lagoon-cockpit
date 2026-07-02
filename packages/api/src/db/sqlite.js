@@ -106,6 +106,27 @@ const migrations = [
       );
     `,
   },
+  {
+    version: 4,
+    description: 'alert severity + hysteresis (clear band/duration)',
+    sql: `
+      CREATE TABLE IF NOT EXISTS alert_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, metric TEXT NOT NULL,
+        operator TEXT NOT NULL CHECK(operator IN ('>', '<', '>=', '<=', '==')),
+        threshold REAL NOT NULL, duration_seconds INTEGER DEFAULT 0, enabled INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS alert_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id INTEGER, rule_name TEXT, metric TEXT,
+        value REAL, threshold REAL, message TEXT, created_at DATETIME DEFAULT (datetime('now')),
+        FOREIGN KEY (rule_id) REFERENCES alert_rules(id) ON DELETE SET NULL
+      );
+      ALTER TABLE alert_rules ADD COLUMN severity TEXT NOT NULL DEFAULT 'warn' CHECK(severity IN ('info','warn','critical'));
+      ALTER TABLE alert_rules ADD COLUMN clear_threshold REAL;
+      ALTER TABLE alert_rules ADD COLUMN clear_duration_seconds INTEGER DEFAULT 0;
+      ALTER TABLE alert_events ADD COLUMN severity TEXT;
+    `,
+  },
 ];
 
 /** Initialize SQLite database */
