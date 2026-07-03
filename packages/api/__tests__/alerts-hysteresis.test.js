@@ -70,15 +70,20 @@ describe('B6: hysteresis — clear band + clear-duration (+ debounce fallback)',
     const m = (cpu) => ({ cpuPercent: cpu, memory: { percent: 0 }, disk: { percent: 0 }, load: { load1: 0 } });
 
     alerts.evaluateRules(m(95), { stopped: 0 }); // fire
+    const pushCountAfterFire = pushSpy.mock.calls.length;
+    expect(pushCountAfterFire).toBe(1); // the fire push, and only the fire push
+
     alerts.evaluateRules(m(10), { stopped: 0 }); // past the band, but clear_duration not elapsed → no resolve yet
 
     let resolveEvent = db.prepare("SELECT COUNT(*) AS n FROM alert_events WHERE severity = 'info'").get().n;
     expect(resolveEvent).toBe(0);
+    expect(pushSpy.mock.calls.length).toBe(pushCountAfterFire); // gated — no recovery push yet
 
     alerts.evaluateRules(m(10), { stopped: 0 }); // still within the hour → still no resolve
 
     resolveEvent = db.prepare("SELECT COUNT(*) AS n FROM alert_events WHERE severity = 'info'").get().n;
     expect(resolveEvent).toBe(0);
+    expect(pushSpy.mock.calls.length).toBe(pushCountAfterFire); // still gated after a second clear tick — pushSpy unchanged
   });
 
   test('container_stopped debounces on K=2 consecutive clear ticks', async () => {

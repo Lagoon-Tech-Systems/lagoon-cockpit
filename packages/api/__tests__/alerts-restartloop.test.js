@@ -112,4 +112,98 @@ describe('B7: restart-loop dedup via gated RestartCount inspect (G-Gk1)', () => 
 
     expect(inspectContainer.mock.calls.length).toBe(0);
   });
+
+  test('a container with a live crash-loop alert suppresses the regular Container Down push, but the state-change broadcast still fires (B7 down-push suppression)', async () => {
+    const listContainers = jest
+      .fn()
+      .mockResolvedValueOnce([{ id: 'c1', name: 'web', state: 'running', status: 'Up 2 hours' }])
+      .mockResolvedValueOnce([{ id: 'c1', name: 'web', state: 'exited', status: 'Exited (1) 2 seconds ago' }]);
+    const inspectContainer = jest.fn(async () => ({ State: { RestartCount: 5 } }));
+    jest.doMock('../src/docker/containers', () => ({ listContainers, inspectContainer }));
+
+    // Tick 1: baseline — seeds _previousContainerStates['c1'] = 'running'. State is 'running'
+    // with no restarting status and no prior recorded state, so the gated inspect never runs
+    // and _restartHistory stays untouched by this tick.
+    armTick();
+    await indexMod.sampleTick();
+    expect(inspectContainer).not.toHaveBeenCalled();
+
+    // Directly seed a live crash-loop alert for c1 — the exported test seam standing in for
+    // a prior tick's inspect having already crossed the rise threshold and fired the
+    // crash-loop push.
+    indexMod._restartHistory['c1'] = { lastCount: 5, windowStart: Date.now(), rises: 3, alerted: true };
+
+    // Tick 2: container transitions running -> exited.
+    armTick();
+    await indexMod.sampleTick();
+
+    // The regular "Container Down" push must be suppressed by the live crash-loop alert...
+    const downPushes = pushSpy.mock.calls.filter((c) => /Container Down/i.test(c[0]));
+    expect(downPushes.length).toBe(0);
+
+    // ...but the tick still processed the transition: the state_change SSE broadcast fires
+    // unconditionally, proving only the push (not the whole transition-handling branch) was skipped.
+    const sse = require('../src/stream/sse');
+    const alertBroadcasts = sse.broadcast.mock.calls.filter((c) => c[0] === 'alert');
+    expect(alertBroadcasts.length).toBe(1);
+    expect(alertBroadcasts[0][1]).toMatchObject({
+      type: 'container_state_change',
+      containerId: 'c1',
+      previousState: 'running',
+      currentState: 'exited',
+    });
+
+    // No second crash-loop push either — the seeded entry was already alerted and the
+    // inspected RestartCount (5) matches lastCount (5), so no new rise is counted.
+    const crashPushes = pushSpy.mock.calls.filter((c) => /crash-looping/i.test(c[0]));
+    expect(crashPushes.length).toBe(0);
+  });
+
+  test('the 5-minute crash-loop window resets rises on expiry but preserves lastCount, then re-fires once in the new window (B7 window reset)', async () => {
+    const inspectContainer = jest.fn();
+    const listContainers = jest.fn(async () => [
+      { id: 'c1', name: 'web', state: 'restarting', status: 'Restarting (1) 3 seconds ago' },
+    ]);
+    jest.doMock('../src/docker/containers', () => ({ listContainers, inspectContainer }));
+
+    // Seed an expired-window crash-loop entry: already alerted in the OLD window, which ended
+    // more than the 5-minute RESTART_WINDOW_MS ago.
+    indexMod._restartHistory['c1'] = {
+      lastCount: 4,
+      windowStart: Date.now() - 6 * 60 * 1000,
+      rises: 3,
+      alerted: true,
+    };
+
+    // Tick 1: RestartCount 5. The window-expiry branch resets rises/alerted to 0/false and
+    // bumps windowStart to `now` FIRST; the rise is then counted from the preserved lastCount
+    // (4 -> 5) in the same pass — so rises lands on 1, not on 0 from a re-baseline.
+    inspectContainer.mockResolvedValueOnce({ State: { RestartCount: 5 } });
+    armTick();
+    await indexMod.sampleTick();
+    expect(indexMod._restartHistory['c1'].lastCount).toBe(5);
+    expect(indexMod._restartHistory['c1'].rises).toBe(1);
+    expect(indexMod._restartHistory['c1'].alerted).toBe(false);
+    expect(pushSpy.mock.calls.filter((c) => /crash-looping/i.test(c[0])).length).toBe(0);
+
+    // Tick 2: RestartCount 6 — rises=2, still under threshold.
+    inspectContainer.mockResolvedValueOnce({ State: { RestartCount: 6 } });
+    armTick();
+    await indexMod.sampleTick();
+    expect(indexMod._restartHistory['c1'].lastCount).toBe(6);
+    expect(indexMod._restartHistory['c1'].rises).toBe(2);
+    expect(pushSpy.mock.calls.filter((c) => /crash-looping/i.test(c[0])).length).toBe(0);
+
+    // Tick 3: RestartCount 7 — rises=3, crosses the threshold again and fires exactly once
+    // in the new window.
+    inspectContainer.mockResolvedValueOnce({ State: { RestartCount: 7 } });
+    armTick();
+    await indexMod.sampleTick();
+    expect(indexMod._restartHistory['c1'].rises).toBe(3);
+    expect(indexMod._restartHistory['c1'].alerted).toBe(true);
+    const crashPushes = pushSpy.mock.calls.filter((c) => /crash-looping/i.test(c[0]));
+    // Exactly one crash-loop push across the whole test — the seeded alerted:true entry
+    // never produced its own push, so this is the only one from the new window.
+    expect(crashPushes.length).toBe(1);
+  });
 });
