@@ -6,6 +6,7 @@ const { execInContainer, isCommandAllowed, getContainerTop } = require("../docke
 const { requireAuth, requireRole } = require("../auth/middleware");
 const { auditLog } = require("../db/sqlite");
 const { validateContainerId, blockSelfAction, safeError, SELF_HOSTNAME } = require("../middleware");
+const { strictLimiter } = require("../security");
 
 // ── List Containers ──────────────────────────────────────
 router.get("/api/containers", requireAuth, async (_req, res) => {
@@ -102,6 +103,7 @@ router.post(
   "/api/containers/:id/start",
   requireAuth,
   requireRole("admin", "operator"),
+  strictLimiter,
   validateContainerId,
   async (req, res) => {
     try {
@@ -118,6 +120,7 @@ router.post(
   "/api/containers/:id/stop",
   requireAuth,
   requireRole("admin", "operator"),
+  strictLimiter,
   validateContainerId,
   blockSelfAction,
   async (req, res) => {
@@ -136,6 +139,7 @@ router.post(
   "/api/containers/:id/restart",
   requireAuth,
   requireRole("admin", "operator"),
+  strictLimiter,
   validateContainerId,
   blockSelfAction,
   async (req, res) => {
@@ -151,20 +155,27 @@ router.post(
 );
 
 // ── Container Exec ───────────────────────────────────────
-router.post("/api/containers/:id/exec", requireAuth, requireRole("admin"), validateContainerId, async (req, res) => {
-  try {
-    const { command } = req.body;
-    if (!command || typeof command !== "string") return res.status(400).json({ error: "command required" });
-    if (command.length > 500) return res.status(400).json({ error: "Command too long (max 500 chars)" });
-    if (!isCommandAllowed(command)) return res.status(403).json({ error: "Command not in allowed list" });
+router.post(
+  "/api/containers/:id/exec",
+  requireAuth,
+  requireRole("admin"),
+  strictLimiter,
+  validateContainerId,
+  async (req, res) => {
+    try {
+      const { command } = req.body;
+      if (!command || typeof command !== "string") return res.status(400).json({ error: "command required" });
+      if (command.length > 500) return res.status(400).json({ error: "Command too long (max 500 chars)" });
+      if (!isCommandAllowed(command)) return res.status(403).json({ error: "Command not in allowed list" });
 
-    const result = await execInContainer(req.params.id, command);
-    auditLog(req.user.id, "container.exec", req.params.id, command);
-    res.json(result);
-  } catch (err) {
-    res.status(err.statusCode === 404 ? 404 : 500).json({ error: safeError(err, "Exec failed") });
-  }
-});
+      const result = await execInContainer(req.params.id, command);
+      auditLog(req.user.id, "container.exec", req.params.id, command);
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode === 404 ? 404 : 500).json({ error: safeError(err, "Exec failed") });
+    }
+  },
+);
 
 // ── Container Top ────────────────────────────────────────
 router.get("/api/containers/:id/top", requireAuth, validateContainerId, async (req, res) => {
@@ -177,42 +188,49 @@ router.get("/api/containers/:id/top", requireAuth, validateContainerId, async (r
 });
 
 // ── Bulk Operations ──────────────────────────────────────
-router.post("/api/containers/bulk", requireAuth, requireRole("admin", "operator"), async (req, res) => {
-  try {
-    const { ids, action } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
-    if (!["start", "stop", "restart"].includes(action))
-      return res.status(400).json({ error: "action must be start, stop, or restart" });
-    if (ids.length > 20) return res.status(400).json({ error: "Max 20 containers per bulk operation" });
+router.post(
+  "/api/containers/bulk",
+  requireAuth,
+  requireRole("admin", "operator"),
+  strictLimiter,
+  async (req, res) => {
+    try {
+      const { ids, action } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
+      if (!["start", "stop", "restart"].includes(action))
+        return res.status(400).json({ error: "action must be start, stop, or restart" });
+      if (ids.length > 20) return res.status(400).json({ error: "Max 20 containers per bulk operation" });
 
-    // Validate all IDs
-    const CONTAINER_ID_RE_LOCAL = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
-    for (const id of ids) {
-      if (!CONTAINER_ID_RE_LOCAL.test(id)) return res.status(400).json({ error: `Invalid container ID: ${id}` });
-      if (id === SELF_HOSTNAME)
-        return res.status(403).json({ error: "Cannot perform this action on the Cockpit API container" });
+      // Validate all IDs
+      const CONTAINER_ID_RE_LOCAL = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
+      for (const id of ids) {
+        if (!CONTAINER_ID_RE_LOCAL.test(id)) return res.status(400).json({ error: `Invalid container ID: ${id}` });
+        if (id === SELF_HOSTNAME)
+          return res.status(403).json({ error: "Cannot perform this action on the Cockpit API container" });
+      }
+
+      const results = await Promise.allSettled(ids.map((id) => containers[`${action}Container`](id)));
+
+      const summary = ids.map((id, i) => ({
+        id,
+        success: results[i].status === "fulfilled",
+        error: results[i].status === "rejected" ? results[i].reason.message : null,
+      }));
+
+      auditLog(req.user.id, `container.bulk.${action}`, ids.join(","), `${ids.length} containers`);
+      res.json({ action, results: summary });
+    } catch (err) {
+      res.status(500).json({ error: safeError(err) });
     }
-
-    const results = await Promise.allSettled(ids.map((id) => containers[`${action}Container`](id)));
-
-    const summary = ids.map((id, i) => ({
-      id,
-      success: results[i].status === "fulfilled",
-      error: results[i].status === "rejected" ? results[i].reason.message : null,
-    }));
-
-    auditLog(req.user.id, `container.bulk.${action}`, ids.join(","), `${ids.length} containers`);
-    res.json({ action, results: summary });
-  } catch (err) {
-    res.status(500).json({ error: safeError(err) });
-  }
-});
+  },
+);
 
 // ── Nuke & Rebuild ───────────────────────────────────────
 router.post(
   "/api/containers/:id/rebuild",
   requireAuth,
   requireRole("admin"),
+  strictLimiter,
   validateContainerId,
   blockSelfAction,
   async (req, res) => {
