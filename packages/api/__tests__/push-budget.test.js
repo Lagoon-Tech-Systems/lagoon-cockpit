@@ -62,4 +62,26 @@ describe('G-P1: per-token push budget caps storm', () => {
       sound: null,
     });
   });
+
+  test('I2: exhausting the non-critical budget does not starve a CRITICAL push (separate bucket)', async () => {
+    for (let i = 0; i < expo.MAX_PUSHES_PER_WINDOW; i++) {
+      const queued = await expo.sendPushNotification('t', 'b', {}, { severity: 'warn', userId: 'u1' });
+      expect(queued).toBe(1);
+    }
+    // Non-critical bucket is now exhausted — an 11th warn is dropped.
+    const warnAfterExhaustion = await expo.sendPushNotification('t', 'b', {}, { severity: 'warn', userId: 'u1' });
+    expect(warnAfterExhaustion).toBe(0);
+
+    // A CRITICAL push right after must still queue — it draws from its own bucket.
+    const critical = await expo.sendPushNotification('t', 'b', {}, { severity: 'critical', userId: 'u1' });
+    expect(critical).toBe(1);
+  });
+
+  test('I2: the critical bucket itself caps at MAX_CRITICAL_PUSHES_PER_WINDOW per token', async () => {
+    let queued = 0;
+    for (let i = 0; i < expo.MAX_CRITICAL_PUSHES_PER_WINDOW + 1; i++) {
+      queued += await expo.sendPushNotification('t', 'b', {}, { severity: 'critical', userId: 'u1' });
+    }
+    expect(queued).toBe(expo.MAX_CRITICAL_PUSHES_PER_WINDOW);
+  });
 });

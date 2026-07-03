@@ -5,7 +5,7 @@
 
 let db = null;
 let pushNotify = null;
-const activeAlerts = new Map(); // ruleId -> { triggeredAt, count }
+const activeAlerts = new Map(); // ruleId -> { triggeredAt, notifiedAt, clearingSince?, clearTicks? }
 let _coldStart = false; // one-shot baseline flag — see seedColdStart()
 
 /**

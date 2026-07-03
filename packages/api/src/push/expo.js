@@ -3,12 +3,17 @@ const { Expo } = require("expo-server-sdk");
 let expo = null;
 let db = null;
 
-// Per-token rolling-window push budget
-const MAX_PUSHES_PER_WINDOW = 10;      // per token
+// Per-token rolling-window push budget (G-P1 anti-DoS gate).
+// CRITICAL pushes get their own, larger budget so a token that has already used
+// its non-critical allowance (info/warn spam) can't have a genuine CRITICAL
+// alert silently dropped behind it.
+const MAX_PUSHES_PER_WINDOW = 10;          // per token, non-critical
+const MAX_CRITICAL_PUSHES_PER_WINDOW = 20; // per token, critical — separate bucket
 const WINDOW_MS = 60 * 60 * 1000;      // rolling 1h
-const _budget = new Map();             // token -> number[] (timestamps)
+const _budget = new Map();             // token -> number[] (timestamps), non-critical
+const _criticalBudget = new Map();     // token -> number[] (timestamps), critical
 
-function _resetBudget() { _budget.clear(); }
+function _resetBudget() { _budget.clear(); _criticalBudget.clear(); }
 
 // Severity → Expo delivery mapping (interruptionLevel / channelId / sound)
 const SEVERITY_DELIVERY = {
@@ -17,11 +22,13 @@ const SEVERITY_DELIVERY = {
   info:     { interruptionLevel: 'passive',        channelId: 'cockpit-info',     sound: null },
 };
 
-function _withinBudget(token) {
+function _withinBudget(token, isCritical) {
+  const bucket = isCritical ? _criticalBudget : _budget;
+  const max = isCritical ? MAX_CRITICAL_PUSHES_PER_WINDOW : MAX_PUSHES_PER_WINDOW;
   const now = Date.now();
-  const hits = (_budget.get(token) || []).filter((t) => now - t < WINDOW_MS);
-  if (hits.length >= MAX_PUSHES_PER_WINDOW) { _budget.set(token, hits); return false; }
-  hits.push(now); _budget.set(token, hits); return true;
+  const hits = (bucket.get(token) || []).filter((t) => now - t < WINDOW_MS);
+  if (hits.length >= max) { bucket.set(token, hits); return false; }
+  hits.push(now); bucket.set(token, hits); return true;
 }
 
 /** Initialize push module */
@@ -65,10 +72,15 @@ async function sendPushNotification(title, body, data = {}, opts = {}) {
   if (tokens.length === 0) return 0;
 
   const sev = SEVERITY_DELIVERY[opts.severity] || SEVERITY_DELIVERY.warn;
+  const isCritical = opts.severity === "critical";
 
   const messages = tokens
     .filter((t) => Expo.isExpoPushToken(t.token))
-    .filter((t) => _withinBudget(t.token))
+    .filter((t) => {
+      if (_withinBudget(t.token, isCritical)) return true;
+      console.warn(`[PUSH] budget drop: token=…${t.token.slice(-6)} severity=${opts.severity || "warn"}`);
+      return false;
+    })
     .map((t) => ({
       to: t.token,
       title,
@@ -99,4 +111,13 @@ async function sendPushNotification(title, body, data = {}, opts = {}) {
   return messages.length;
 }
 
-module.exports = { init, registerToken, removeToken, sendPushNotification, MAX_PUSHES_PER_WINDOW, _resetBudget, SEVERITY_DELIVERY };
+module.exports = {
+  init,
+  registerToken,
+  removeToken,
+  sendPushNotification,
+  MAX_PUSHES_PER_WINDOW,
+  MAX_CRITICAL_PUSHES_PER_WINDOW,
+  _resetBudget,
+  SEVERITY_DELIVERY,
+};

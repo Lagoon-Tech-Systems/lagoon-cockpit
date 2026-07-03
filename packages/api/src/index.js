@@ -128,14 +128,28 @@ async function sampleTick() {
   try {
     const now = Date.now();
     if (!shouldSample({ now, lastSampleMs: _lastSampleMs, clientCount: getClientCount() })) return;
+    // Advance cadence immediately once the gate passes, before any fallible stage
+    // below runs. A failed tick (recorder or alert-eval throw) must not leave the
+    // idle 60s throttle stuck at its previous value — that would let every
+    // subsequent 15s scheduler tick re-attempt the full body instead of waiting
+    // out the idle window. A failed tick also has no reason to retry sooner than
+    // the next scheduled tick, so there's no downside to advancing here vs. after.
+    _lastSampleMs = now;
     const metrics = getSystemMetrics();
     const allContainers = await containers.listContainers(true);
     const running = allContainers.filter((c) => c.state === "running").length;
     const containerStats = { total: allContainers.length, running, stopped: allContainers.length - running };
-    recorder(metrics, containerStats);
+    try {
+      recorder(metrics, containerStats);
+    } catch (err) {
+      console.error("[SAMPLER] recorder error:", err.message);
+    }
     cacheLatest(metrics, containerStats);
-    await evaluateAndDetect(metrics, containerStats, allContainers);
-    _lastSampleMs = now;
+    try {
+      await evaluateAndDetect(metrics, containerStats, allContainers);
+    } catch (err) {
+      console.error("[ALERTS] evaluate error:", err.message);
+    }
   } catch (err) {
     console.error("[SAMPLER] sampleTick error:", err.message);
   }

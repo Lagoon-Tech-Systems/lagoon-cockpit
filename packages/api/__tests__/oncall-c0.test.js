@@ -202,6 +202,84 @@ describe('C0 Task A3: cold-start storm guard prevents boot-time alert storm (G-T
   });
 });
 
+describe('I1: sampler per-stage error isolation (final review fix wave)', () => {
+  let db, dir, indexMod, alerts, listContainersMock;
+
+  beforeEach(() => {
+    ({ db, dir } = freshDb());
+    require('../src/db/sqlite').runMigrations(db);
+    jest.resetModules();
+    // No SSE clients connected — the 2am case.
+    jest.doMock('../src/stream/sse', () => ({
+      getClientCount: jest.fn(() => 0),
+      broadcast: jest.fn(),
+      closeAllClients: jest.fn(),
+    }));
+    listContainersMock = jest.fn(async () => [{ id: 'c1', name: 'web', state: 'running' }]);
+    jest.doMock('../src/docker/containers', () => ({
+      listContainers: listContainersMock,
+      inspectContainer: jest.fn(async () => ({ State: { RestartCount: 0 } })),
+    }));
+    // Force a breaching metric (the disk-full-adjacent case: something must fire).
+    jest.doMock('../src/system/metrics', () => ({
+      getSystemMetrics: () => ({ cpuPercent: 99, memory: { percent: 10 }, disk: { percent: 10 }, load: { load1: 0.1 } }),
+    }));
+    alerts = require('../src/system/alerts');
+    alerts.init(db, async () => {});
+    alerts.createRule('cpu-high', 'cpu_percent', '>', 90, 0);
+    indexMod = require('../src/index');
+    indexMod._resetSamplerState();
+  });
+
+  afterEach(() => {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+    jest.dontMock('../src/stream/sse');
+    jest.dontMock('../src/docker/containers');
+    jest.dontMock('../src/system/metrics');
+    jest.resetModules();
+  });
+
+  test('recorder throw (disk full) does not starve alert evaluation — breaching rule still fires', async () => {
+    indexMod._setRecorder(() => { throw new Error('disk full'); });
+    const before = db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n;
+
+    await expect(indexMod.sampleTick()).resolves.toBeUndefined();
+
+    const after = db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n;
+    expect(after).toBe(before + 1);
+  });
+
+  test('evaluateAndDetect throw does not reject sampleTick, cadence still advances (idle throttle intact), and a subsequent tick still evaluates alerts', async () => {
+    indexMod._setRecorder(() => {});
+    const before = db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n;
+
+    const nowSpy = jest.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000_000);
+    jest.spyOn(alerts, 'evaluateRules').mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+    await expect(indexMod.sampleTick()).resolves.toBeUndefined();
+    // The throwing pass evaluated nothing — no alert from this tick.
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(before);
+
+    // Cadence must have advanced despite the throw: a tick only 15s later is
+    // still within the idle 60s minGap and must be throttled outright (no
+    // re-attempt at all) — proves _lastSampleMs was not left stuck by the throw.
+    listContainersMock.mockClear();
+    nowSpy.mockReturnValue(1_000_000 + 15000);
+    await indexMod.sampleTick();
+    expect(listContainersMock).not.toHaveBeenCalled();
+    nowSpy.mockRestore();
+
+    // A later tick (evaluateRules no longer mocked to throw) must still work.
+    indexMod._resetSamplerState();
+    indexMod._setRecorder(() => {});
+    await indexMod.sampleTick();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM alert_events').get().n).toBe(before + 1);
+  });
+});
+
 test('evaluateAndDetect broadcasts an SSE alert on container state change with zero SSE clients (C0 review fix wave 1)', async () => {
   jest.resetModules();
   // Zero SSE clients throughout — the mobile Alerts tab's only data source must still fire.
