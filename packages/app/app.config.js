@@ -18,6 +18,12 @@ module.exports = {
       bundleIdentifier: "com.lagoontechsystems.cockpit",
       supportsTablet: true,
       icon: "./assets/icon.png",
+      entitlements: {
+        // Lets severity=critical alerts render as Time Sensitive (surfaces during
+        // Focus modes the user allows). Standard entitlement - not Apple's
+        // review-gated Critical Alerts. Server sets interruptionLevel in push/expo.js.
+        "com.apple.developer.usernotifications.time-sensitive": true,
+      },
     },
     android: {
       package: "com.lagoontechsystems.cockpit",
