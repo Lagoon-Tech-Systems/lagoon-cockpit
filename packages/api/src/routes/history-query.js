@@ -9,6 +9,12 @@ const { resolveRetentionDays } = require("../edition/features");
 const RANGE_DAYS = { "24h": 1, "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
 const MAX_POINTS = 5000;
 const ABS_MAX_DAYS = 730; // matches the daily hard cap
+// Floor for requestedDays inside clampDays. Only the from/to path can produce a
+// sub-day value here (range presets are all >=1 day; legacy pre-clamps to >=1 in
+// parseRequest) — a tiny epsilon (not 1) keeps sub-day triage windows (e.g. ±30min
+// around a fresh alert) from being inflated to a full day and pushed into the
+// hourly tier, whose rollups only contain COMPLETED hours.
+const MIN_REQUESTED_DAYS = 0.001;
 
 function badRequest(msg) {
   return { error: { status: 400, body: { error: msg } } };
@@ -71,12 +77,15 @@ function parseRequest(query) {
 
 /**
  * Clamp a requested day-window by the edition retention limit.
- * requestedDays is first coerced into [1, ABS_MAX_DAYS], then min()'d
- * against resolveRetentionDays(edition). Applies on EVERY param path.
+ * requestedDays is first coerced into [MIN_REQUESTED_DAYS, ABS_MAX_DAYS], then
+ * min()'d against resolveRetentionDays(edition). Applies on EVERY param path.
+ * The lower bound is a small epsilon (not 1 day) so sub-day from/to windows
+ * survive intact — range presets and legacy ?hours= never produce a value
+ * below 1 day, so they are unaffected.
  */
 function clampDays(requestedDays, edition) {
   let req = requestedDays;
-  if (!Number.isFinite(req) || req < 1) req = 1;
+  if (!Number.isFinite(req) || req < MIN_REQUESTED_DAYS) req = MIN_REQUESTED_DAYS;
   if (req > ABS_MAX_DAYS) req = ABS_MAX_DAYS;
   const retentionDays = resolveRetentionDays(edition);
   const servedDays = Math.min(req, retentionDays);

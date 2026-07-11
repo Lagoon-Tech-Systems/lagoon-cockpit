@@ -263,6 +263,18 @@ function seedHourly(bucketStart, cpuAvg = 50) {
     .run(bucketStart, cpuAvg, cpuAvg, cpuAvg);
 }
 
+// Insert a raw metrics_history row at a given epoch-second timestamp.
+function seedRawAt(epochSec, cpuAvg = 50) {
+  const createdAt = new Date(epochSec * 1000).toISOString().slice(0, 19).replace("T", " ");
+  database
+    .prepare(
+      `INSERT INTO metrics_history
+         (cpu_percent, memory_percent, disk_percent, load_1, container_total, container_running, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(cpuAvg, 50, 50, 1, 5, 3, createdAt);
+}
+
 let token;
 beforeAll(async () => {
   const res = await request(app).post("/auth/token").send({ apiKey: HTTP_API_KEY });
@@ -611,6 +623,41 @@ describe("GET /api/metrics/history: MAX_POINTS auto-promote", () => {
     );
     expect(res.status).toBe(200);
     expect(res.body.buckets.length).toBeLessThanOrEqual(MAX_POINTS);
+  });
+});
+
+describe("GET /api/metrics/history: sub-day from/to window (fresh-alert triage)", () => {
+  // Regression test for a prod bug: the triage screen requests a ±30min window
+  // around an alert's trip time. clampDays floored requestedDays to a minimum of
+  // 1 day, so selectTier(servedDays=1) picked "hourly" — but hourly rollups only
+  // contain COMPLETED hours (rollupTick folds finished raw buckets), so a window
+  // inside the current hour returned 0 buckets: an empty chart for exactly the
+  // case the triage screen needs (fresh alerts). Prod evidence: from/to spanning
+  // 22:22-23:22 UTC returned {resolution: "hourly", buckets: 0, servedDays: 1}
+  // while raw rows existed for the whole window.
+  test("±30min from/to window with raw rows present -> resolution raw, buckets non-empty", async () => {
+    setEdition("pro", 365);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const T = nowSec - 60; // "trip time" ~1 minute ago, inside the current hour
+    seedRawAt(T - 600, 40);
+    seedRawAt(T - 300, 45);
+    seedRawAt(T, 50);
+    seedRawAt(Math.min(T + 30, nowSec), 55);
+
+    const res = await auth(
+      request(app).get(`/api/metrics/history?from=${T - 1800}&to=${T + 1800}`)
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.resolution).toBe("raw");
+    expect(Array.isArray(res.body.buckets)).toBe(true);
+    expect(res.body.buckets.length).toBeGreaterThan(0);
+  });
+
+  test("?range=24h preset is unaffected by the sub-day from/to fix (servedDays >= 1)", async () => {
+    setEdition("pro", 365);
+    const res = await auth(request(app).get("/api/metrics/history?range=24h"));
+    expect(res.status).toBe(200);
+    expect(res.body.servedDays).toBeGreaterThanOrEqual(1);
   });
 });
 
