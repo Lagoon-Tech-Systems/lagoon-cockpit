@@ -17,15 +17,6 @@
     "test:api": "cd packages/api && npm test",
     "typecheck": "cd packages/app && npx tsc --noEmit"
   },
-  "overrides": {
-    "brace-expansion": "^2.0.1",
-    "react-native-worklets": "0.8.1"
-  },
-  "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "expo-linking": "~55.0.9",
-    "expo-server-sdk": "^5.0.0"
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.1.0",
