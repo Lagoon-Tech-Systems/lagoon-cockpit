@@ -18,7 +18,11 @@ Lagoon Cockpit is a self-hosted, mobile-first Docker dashboard I've been buildin
 - **Tap the notification → a triage screen** for that exact alert: what fired and when, the metric's trend with your threshold drawn on it, and the current top-consuming containers (labeled "not necessarily the cause" — it's a hint, not an accusation).
 - When the alert resolves, you get one "✓ resolved" push instead of wondering.
 
-**The rest of it** (been building for a while): container/stack management (start/stop/restart/exec/logs), live dashboards over SSE, metric history with tiered rollups (up to 2 years), SSL & endpoint monitoring, scheduled actions, webhooks, multi-server, biometric app lock, CLI companion.
+**The rest of it** (been building for a while): container/stack management (start/stop/restart/logs), live dashboards over SSE, metric history with tiered rollups (up to 2 years), SSL & endpoint monitoring, scheduled actions, webhooks, multi-server, biometric app lock, CLI companion.
+
+**What it does not do:** there is no interactive shell. Running commands in a container is limited
+to an exact-match allowlist of 18 read-only diagnostics (`df -h`, `ps aux`, `pg_isready`, …), with
+shell metacharacters blocked. If you want a console, Portainer has one and this doesn't.
 
 **Honest limitations, because this sub can smell marketing:**
 - Push delivery is best-effort (Expo/FCM/APNs) — it's a monitoring tool, not a paging SLA.

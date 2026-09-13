@@ -35,7 +35,7 @@ export const FEATURE_EDITIONS: Record<string, string> = {
   reports: "pro",
 
   // Pro features (basic tier)
-  push_basic: "pro",
+  push_basic: "ce", // registration only, no advanced channels — matches API features.js and the Pro overlay
 
   // Enterprise features
   sso_saml: "enterprise",

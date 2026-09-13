@@ -13,7 +13,7 @@ If you discover a security vulnerability in Lagoon Cockpit, please report it res
 
 **Email**: security@lagoontechsystems.com
 
-**Alternative**: Use [GitHub Security Advisories](https://github.com/lagoon-tech/cockpit/security/advisories/new) to report privately.
+**Alternative**: Use [GitHub Security Advisories](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/security/advisories/new) to report privately.
 
 ### What to include
 
@@ -77,11 +77,10 @@ Lagoon Cockpit is designed for managing production infrastructure. Security is b
 - License keys validated offline (no phone-home)
 
 ### Supply Chain
-- GitHub Actions pinned to commit SHAs
+- GitHub Actions pinned to commit SHAs (exception: `expo/expo-github-action`, pinned to a major tag)
 - TruffleHog secret scanning on every push
 - npm audit on every CI run
 - Container scanning with Trivy (nightly)
-- SBOM generation on releases
 
 ## Please do NOT
 

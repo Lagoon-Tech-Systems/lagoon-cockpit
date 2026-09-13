@@ -12,7 +12,8 @@
 | Alert de-noise (hysteresis + crash-loop collapse) | ✅ built-in, on by default | ❌ | ❌ | ⚠️ manual retries setting | ❌ |
 | Tap alert → triage screen (trend + threshold + top consumers) | ✅ | ❌ | ❌ (dashboards, no alert-anchored view) | ❌ | ❌ |
 | "✓ resolved" notification | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Manage containers (start/stop/restart/exec/logs) | ✅ | ✅ (desktop) | ❌ monitoring only | ❌ | ⚠️ logs only |
+| Manage containers (start/stop/restart/logs) | ✅ | ✅ (desktop) | ❌ monitoring only | ❌ | ⚠️ logs only |
+| Interactive shell into a container | ⚠️ **no** — 18 fixed read-only diagnostics only | ✅ console | ❌ | ❌ | ❌ |
 | Metric history | ✅ tiered rollups, up to 2y | ⚠️ basic | ✅ | ⚠️ uptime history | ❌ |
 | License | AGPL-3.0 | BSL/EE mix (CE exists) | MIT | MIT | MIT |
 
@@ -22,4 +23,8 @@
 - **Uptime Kuma** has 90+ notification integrations; Cockpit has push/webhooks/Telegram-Slack (Pro).
 - **Dozzle** is the best pure log-tailing experience.
 
-Cockpit's claim is narrow and specific: **it's the only one that closes the whole loop on the phone** — woken correctly (severity + de-noise), shown what broke (alert-anchored triage), told when it's over (resolve push), and able to act (restart/stop/exec) without a laptop.
+Cockpit's claim is narrow and specific: **it's the only one that closes the whole loop on the phone** — woken correctly (severity + de-noise), shown what broke (alert-anchored triage), told when it's over (resolve push), and able to act (restart/stop/logs) without a laptop.
+
+Note on the shell row: Cockpit deliberately ships an exact-match allowlist of 18 read-only
+diagnostic commands (`pg_isready`, `df -h`, `ps aux`, …) rather than an interactive shell. That is
+a real capability gap against Portainer's console, not a wording choice — say so plainly if asked.
