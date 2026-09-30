@@ -6,13 +6,18 @@ import {
   StyleSheet,
   RefreshControl,
   Platform,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withRepeat, withSequence, Easing } from 'react-native-reanimated';
-import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
-import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
+import {
+  getProfileHealthAuth,
+  useServerStore,
+  type ServerProfile,
+} from '../src/stores/serverStore';
 import { COLORS, RADIUS, SPACING } from '../src/theme/tokens';
 import Skeleton from '../src/components/Skeleton';
 import { TactileCard } from '../src/components/ui/TactileCard';
@@ -22,14 +27,6 @@ const REFRESH_INTERVAL = 30_000; // 30 seconds
 const FETCH_TIMEOUT = 8_000; // 8 second timeout per request
 const CPU_WARN = 85;
 const MEM_WARN = 85;
-
-/* ─── Secure storage helper (mirrors serverStore) ─── */
-const storage = {
-  getItem: async (key: string): Promise<string | null> => {
-    if (Platform.OS === 'web') return localStorage.getItem(key);
-    return SecureStore.getItemAsync(key);
-  },
-};
 
 /* ─── Types ─── */
 type ServerStatus = 'healthy' | 'degraded' | 'unreachable' | 'loading';
@@ -301,11 +298,15 @@ function ServerCard({
 /* ─── Main Screen ─── */
 export default function ServersScreen() {
   const router = useRouter();
-  const { profiles, loadProfiles, setActiveProfile, authenticate } = useServerStore();
+  const { profiles, loadProfiles, authenticate, reconnect } = useServerStore();
   const [healthMap, setHealthMap] = useState<Record<string, ServerHealthData>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [loginProfile, setLoginProfile] = useState<ServerProfile | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch health for a single profile, updating state as it arrives
@@ -318,15 +319,10 @@ export default function ServersScreen() {
     let serviceCount: number | undefined;
     let uptimeSeconds: number | undefined;
 
-    // Get stored credential for auth header
-    const cred = await storage.getItem(`cockpit_cred_${profile.id}`);
-    const authHeaders: Record<string, string> = {};
-
-    // If we have a stored credential and auth mode is key, use it as bearer
-    if (cred && profile.authMode === 'key') {
-      // First try to get an access token by authenticating, but fall back to API key header
-      authHeaders['X-API-Key'] = cred;
-    }
+    const { headers: authHeaders, getAccessToken } = await getProfileHealthAuth(
+      profile,
+      fetchWithTimeout,
+    );
 
     // 1. Health check
     try {
@@ -344,28 +340,7 @@ export default function ServersScreen() {
     // 2. Overview data (only if health succeeded)
     if (status !== 'unreachable') {
       try {
-        // Try to get a token for authenticated requests
-        let token: string | null = null;
-        if (cred) {
-          try {
-            const endpoint = profile.authMode === 'key' ? '/auth/token' : '/auth/login';
-            const body = profile.authMode === 'key'
-              ? { apiKey: cred }
-              : { email: '', password: cred };
-            const authRes = await fetchWithTimeout(`${profile.url}${endpoint}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body),
-            });
-            if (authRes.ok) {
-              const authData = await authRes.json();
-              token = authData.accessToken;
-            }
-          } catch {
-            // proceed without token
-          }
-        }
-
+        const token = await getAccessToken();
         const overviewHeaders: Record<string, string> = {
           'Content-Type': 'application/json',
           ...authHeaders,
@@ -465,22 +440,44 @@ export default function ServersScreen() {
   const handleConnect = useCallback(async (profile: ServerProfile) => {
     setConnecting(profile.id);
     try {
-      setActiveProfile(profile.id);
-      const cred = await storage.getItem(`cockpit_cred_${profile.id}`);
-      if (!cred) {
-        // No stored credential — go to main screen to re-add
+      const result = await reconnect(profile.id);
+      if (result === 'connected') {
+        router.replace('/(tabs)/overview');
+      } else if (profile.authMode === 'login') {
+        setLoginProfile(profile);
+        setLoginEmail('');
+        setLoginPassword('');
+        setLoginError(null);
+      } else {
         router.replace('/');
-        return;
       }
-      await authenticate(profile.id, cred);
-      router.replace('/(tabs)/overview');
     } catch {
-      // Auth failed — go to server select for that server
       router.replace('/');
     } finally {
       setConnecting(null);
     }
-  }, [setActiveProfile, authenticate, router]);
+  }, [reconnect, router]);
+
+  const handleLogin = useCallback(async () => {
+    if (!loginProfile || !loginEmail.trim() || !loginPassword) {
+      setLoginError('L’adresse e-mail et le mot de passe sont requis.');
+      return;
+    }
+
+    setConnecting(loginProfile.id);
+    setLoginError(null);
+    try {
+      await authenticate(loginProfile.id, loginPassword, { email: loginEmail.trim() });
+      setLoginProfile(null);
+      setLoginEmail('');
+      setLoginPassword('');
+      router.replace('/(tabs)/overview');
+    } catch {
+      setLoginError('Connexion impossible. Vérifiez vos identifiants.');
+    } finally {
+      setConnecting(null);
+    }
+  }, [authenticate, loginEmail, loginPassword, loginProfile, router]);
 
   const renderItem = useCallback(({ item, index }: { item: ServerProfile; index: number }) => (
     <ServerCard
@@ -528,6 +525,55 @@ export default function ServersScreen() {
         }}
       />
       <View style={styles.container}>
+        {loginProfile ? (
+          <View style={styles.loginPrompt}>
+            <Text style={styles.loginTitle}>Connexion à {loginProfile.name}</Text>
+            {loginError ? <Text style={styles.loginError}>{loginError}</Text> : null}
+            <TextInput
+              style={styles.loginInput}
+              placeholder="Adresse e-mail"
+              placeholderTextColor={COLORS.textTertiary}
+              value={loginEmail}
+              onChangeText={setLoginEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <TextInput
+              style={styles.loginInput}
+              placeholder="Mot de passe"
+              placeholderTextColor={COLORS.textTertiary}
+              value={loginPassword}
+              onChangeText={setLoginPassword}
+              secureTextEntry
+            />
+            <View style={styles.loginActions}>
+              <TouchableOpacity
+                style={styles.loginCancelButton}
+                onPress={() => {
+                  setLoginProfile(null);
+                  setLoginEmail('');
+                  setLoginPassword('');
+                  setLoginError(null);
+                }}
+                disabled={connecting === loginProfile.id}
+              >
+                <Text style={styles.loginCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.loginButton}
+                onPress={handleLogin}
+                disabled={connecting === loginProfile.id}
+              >
+                {connecting === loginProfile.id ? (
+                  <ActivityIndicator size="small" color={COLORS.textPrimary} />
+                ) : (
+                  <Text style={styles.loginButtonText}>Se connecter</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
         {/* Summary bar */}
         {profiles.length > 0 && !initialLoad && (
           <View style={styles.summaryBar}>
@@ -610,6 +656,62 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     paddingBottom: 48,
     gap: SPACING.md,
+  },
+  loginPrompt: {
+    margin: SPACING.lg,
+    marginBottom: 0,
+    padding: SPACING.lg,
+    gap: SPACING.sm,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  loginTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  loginError: {
+    color: COLORS.red,
+    fontSize: 13,
+  },
+  loginInput: {
+    padding: SPACING.md,
+    color: COLORS.textPrimary,
+    backgroundColor: COLORS.bg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  loginActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  loginCancelButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  loginCancelText: {
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+  },
+  loginButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.blue,
+  },
+  loginButtonText: {
+    color: COLORS.textPrimary,
+    fontWeight: '600',
   },
 
   /* Summary bar */
