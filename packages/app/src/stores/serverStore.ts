@@ -41,6 +41,15 @@ export interface ServerProfile {
   createdAt: number;
 }
 
+export type ReconnectResult = 'connected' | 'needs-login' | 'unreachable';
+
+// fetch rejects with a TypeError when the request never reaches the server
+// (offline, DNS, refused, TLS). Auth rejections arrive as HTTP responses and
+// are thrown as plain Errors, so they must not be reported as unreachable.
+function isNetworkError(err: unknown): boolean {
+  return err instanceof TypeError;
+}
+
 interface ServerState {
   profiles: ServerProfile[];
   activeProfileId: string | null;
@@ -56,6 +65,7 @@ interface ServerState {
   updateProfile: (id: string, updates: Partial<Omit<ServerProfile, 'id' | 'createdAt'>>) => Promise<void>;
   setActiveProfile: (id: string) => void;
   authenticate: (profileId: string, credential: string, extra?: { email?: string }) => Promise<void>;
+  reconnect: (profileId: string) => Promise<ReconnectResult>;
   refreshAuth: () => Promise<void>;
   disconnect: () => void;
   getActiveUrl: () => string | null;
@@ -71,6 +81,37 @@ async function writeProfiles(profiles: ServerProfile[]): Promise<void> {
   await storage.setItem(PROFILES_KEY, JSON.stringify(profiles));
 }
 
+export async function getProfileHealthAuth(
+  profile: ServerProfile,
+  request: (url: string, init?: RequestInit) => Promise<Response>,
+): Promise<{ headers: Record<string, string>; getAccessToken: () => Promise<string | null> }> {
+  const noAccessToken = async () => null;
+  if (profile.authMode !== 'key') return { headers: {}, getAccessToken: noAccessToken };
+
+  const apiKey = await storage.getItem(credentialKey(profile.id));
+  if (!apiKey) return { headers: {}, getAccessToken: noAccessToken };
+
+  const headers = { 'X-API-Key': apiKey };
+  return {
+    headers,
+    getAccessToken: async () => {
+      try {
+        const response = await request(`${profile.url}/auth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey }),
+        });
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        return data.accessToken || null;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
 export const useServerStore = create<ServerState>((set, get) => ({
   profiles: [],
   activeProfileId: null,
@@ -82,6 +123,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   loadProfiles: async () => {
     const profiles = await readProfiles();
+    await Promise.all(
+      profiles
+        .filter((profile) => profile.authMode === 'login')
+        .map((profile) => storage.deleteItem(credentialKey(profile.id))),
+    );
     set({ profiles });
   },
 
@@ -126,8 +172,10 @@ export const useServerStore = create<ServerState>((set, get) => ({
       const profile = get().profiles.find((p) => p.id === profileId);
       if (!profile) throw new Error('Profile not found');
 
-      // Store credential for future use
-      await storage.setItem(credentialKey(profileId), credential);
+      // API keys remain persisted for reconnect. Login passwords must never be stored.
+      if (profile.authMode === 'key') {
+        await storage.setItem(credentialKey(profileId), credential);
+      }
 
       const endpoint = profile.authMode === 'key' ? '/auth/token' : '/auth/login';
       const body =
@@ -167,6 +215,28 @@ export const useServerStore = create<ServerState>((set, get) => ({
       const message = err instanceof Error ? err.message : 'Authentication failed';
       set({ isConnecting: false, error: message });
       throw err;
+    }
+  },
+
+  reconnect: async (profileId) => {
+    const profile = get().profiles.find((candidate) => candidate.id === profileId);
+    if (!profile) return 'needs-login';
+
+    get().setActiveProfile(profileId);
+
+    try {
+      if (profile.authMode === 'login') {
+        await get().refreshAuth();
+      } else {
+        const apiKey = await storage.getItem(credentialKey(profileId));
+        if (!apiKey) return 'needs-login';
+        await get().authenticate(profileId, apiKey);
+      }
+      return 'connected';
+    } catch (err) {
+      // A network failure keeps the stored refresh token / API key: the
+      // credential was never judged, so asking for a login would mislead.
+      return isNetworkError(err) ? 'unreachable' : 'needs-login';
     }
   },
 
