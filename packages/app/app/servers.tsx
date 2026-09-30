@@ -8,6 +8,7 @@ import {
   Platform,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -443,6 +444,8 @@ export default function ServersScreen() {
       const result = await reconnect(profile.id);
       if (result === 'connected') {
         router.replace('/(tabs)/overview');
+      } else if (result === 'unreachable') {
+        Alert.alert('Server unreachable', `Cannot reach ${profile.url}. Check the connection and try again.`);
       } else if (profile.authMode === 'login') {
         setLoginProfile(profile);
         setLoginEmail('');
@@ -460,7 +463,7 @@ export default function ServersScreen() {
 
   const handleLogin = useCallback(async () => {
     if (!loginProfile || !loginEmail.trim() || !loginPassword) {
-      setLoginError('L’adresse e-mail et le mot de passe sont requis.');
+      setLoginError('Email and password are required.');
       return;
     }
 
@@ -473,7 +476,7 @@ export default function ServersScreen() {
       setLoginPassword('');
       router.replace('/(tabs)/overview');
     } catch {
-      setLoginError('Connexion impossible. Vérifiez vos identifiants.');
+      setLoginError('Sign-in failed. Check your email and password.');
     } finally {
       setConnecting(null);
     }
@@ -527,11 +530,11 @@ export default function ServersScreen() {
       <View style={styles.container}>
         {loginProfile ? (
           <View style={styles.loginPrompt}>
-            <Text style={styles.loginTitle}>Connexion à {loginProfile.name}</Text>
+            <Text style={styles.loginTitle}>Sign in to {loginProfile.name}</Text>
             {loginError ? <Text style={styles.loginError}>{loginError}</Text> : null}
             <TextInput
               style={styles.loginInput}
-              placeholder="Adresse e-mail"
+              placeholder="Email"
               placeholderTextColor={COLORS.textTertiary}
               value={loginEmail}
               onChangeText={setLoginEmail}
@@ -540,7 +543,7 @@ export default function ServersScreen() {
             />
             <TextInput
               style={styles.loginInput}
-              placeholder="Mot de passe"
+              placeholder="Password"
               placeholderTextColor={COLORS.textTertiary}
               value={loginPassword}
               onChangeText={setLoginPassword}
@@ -557,7 +560,7 @@ export default function ServersScreen() {
                 }}
                 disabled={connecting === loginProfile.id}
               >
-                <Text style={styles.loginCancelText}>Annuler</Text>
+                <Text style={styles.loginCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.loginButton}
@@ -567,7 +570,7 @@ export default function ServersScreen() {
                 {connecting === loginProfile.id ? (
                   <ActivityIndicator size="small" color={COLORS.textPrimary} />
                 ) : (
-                  <Text style={styles.loginButtonText}>Se connecter</Text>
+                  <Text style={styles.loginButtonText}>Sign in</Text>
                 )}
               </TouchableOpacity>
             </View>

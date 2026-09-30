@@ -205,3 +205,43 @@ describe('login profile reconnect', () => {
     expect(store.getState().accessToken).toBe('key-access-token');
   });
 });
+
+describe('reconnect when the server cannot be reached', () => {
+  const networkFailure = () => Promise.reject(new TypeError('Network request failed'));
+
+  it('reports unreachable for a login profile and keeps its refresh token', async () => {
+    const profile = seedProfile();
+    mockStorage.set(`cockpit_refresh_${profile.id}`, 'kept-refresh-token');
+    global.fetch = jest.fn(networkFailure) as jest.Mock;
+    const store = loadFreshServerStore();
+    await store.getState().loadProfiles();
+
+    await expect(store.getState().reconnect(profile.id)).resolves.toBe('unreachable');
+
+    expect(mockStorage.get(`cockpit_refresh_${profile.id}`)).toBe('kept-refresh-token');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toBe(`${TEST_URL}/auth/refresh`);
+  });
+
+  it('reports unreachable for a key profile and keeps its API key', async () => {
+    const profile = seedProfile('key');
+    mockStorage.set(`cockpit_cred_${profile.id}`, 'test-api-key');
+    global.fetch = jest.fn(networkFailure) as jest.Mock;
+    const store = loadFreshServerStore();
+    await store.getState().loadProfiles();
+
+    await expect(store.getState().reconnect(profile.id)).resolves.toBe('unreachable');
+
+    expect(mockStorage.get(`cockpit_cred_${profile.id}`)).toBe('test-api-key');
+  });
+
+  it('reports needs-login, not unreachable, when the server rejects the API key', async () => {
+    const profile = seedProfile('key');
+    mockStorage.set(`cockpit_cred_${profile.id}`, 'revoked-api-key');
+    global.fetch = jest.fn(async () => response(false, 401, { error: 'Invalid API key' })) as jest.Mock;
+    const store = loadFreshServerStore();
+    await store.getState().loadProfiles();
+
+    await expect(store.getState().reconnect(profile.id)).resolves.toBe('needs-login');
+  });
+});

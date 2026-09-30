@@ -41,7 +41,14 @@ export interface ServerProfile {
   createdAt: number;
 }
 
-export type ReconnectResult = 'connected' | 'needs-login';
+export type ReconnectResult = 'connected' | 'needs-login' | 'unreachable';
+
+// fetch rejects with a TypeError when the request never reaches the server
+// (offline, DNS, refused, TLS). Auth rejections arrive as HTTP responses and
+// are thrown as plain Errors, so they must not be reported as unreachable.
+function isNetworkError(err: unknown): boolean {
+  return err instanceof TypeError;
+}
 
 interface ServerState {
   profiles: ServerProfile[];
@@ -226,8 +233,10 @@ export const useServerStore = create<ServerState>((set, get) => ({
         await get().authenticate(profileId, apiKey);
       }
       return 'connected';
-    } catch {
-      return 'needs-login';
+    } catch (err) {
+      // A network failure keeps the stored refresh token / API key: the
+      // credential was never judged, so asking for a login would mislead.
+      return isNetworkError(err) ? 'unreachable' : 'needs-login';
     }
   },
 

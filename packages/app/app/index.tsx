@@ -67,13 +67,15 @@ export default function ServerSelectScreen() {
       const result = await reconnect(profile.id);
       if (result === 'connected') {
         router.replace('/(tabs)/overview');
+      } else if (result === 'unreachable') {
+        setError(`Cannot reach ${profile.url}. Check the connection and try again.`);
       } else if (profile.authMode === 'login') {
         setLoginProfile(profile);
         setLoginEmail('');
         setLoginPassword('');
         setShowAdd(false);
       } else {
-        setError('Clé API introuvable. Supprimez ce profil, puis ajoutez-le à nouveau.');
+        setError('API key missing or rejected. Long-press to remove this profile, then add it again.');
       }
     } catch (err) {
       console.error('[COCKPIT] handleConnect failed:', err);
@@ -86,7 +88,7 @@ export default function ServerSelectScreen() {
 
   const handleLogin = async () => {
     if (!loginProfile || !loginEmail.trim() || !loginPassword) {
-      setError('L’adresse e-mail et le mot de passe sont requis.');
+      setError('Email and password are required.');
       return;
     }
 
@@ -100,7 +102,7 @@ export default function ServerSelectScreen() {
       setLoginPassword('');
       router.replace('/(tabs)/overview');
     } catch (err) {
-      setError(sanitizeErrorMessage(err, 'Connexion impossible.'));
+      setError(sanitizeErrorMessage(err, 'Sign-in failed.'));
     } finally {
       setConnecting(false);
       setConnectingId(null);
@@ -219,11 +221,11 @@ export default function ServerSelectScreen() {
 
       {loginProfile ? (
         <View style={[styles.form, styles.loginForm]}>
-          <Text style={styles.formTitle}>Connexion à {loginProfile.name}</Text>
+          <Text style={styles.formTitle}>Sign in to {loginProfile.name}</Text>
           <View style={styles.inputGroup}>
             <TextInput
               style={styles.input}
-              placeholder="Adresse e-mail"
+              placeholder="Email"
               placeholderTextColor={COLORS.textSecondary}
               value={loginEmail}
               onChangeText={setLoginEmail}
@@ -234,7 +236,7 @@ export default function ServerSelectScreen() {
           <View style={styles.inputGroup}>
             <TextInput
               style={styles.input}
-              placeholder="Mot de passe"
+              placeholder="Password"
               placeholderTextColor={COLORS.textSecondary}
               value={loginPassword}
               onChangeText={setLoginPassword}
@@ -252,7 +254,7 @@ export default function ServerSelectScreen() {
               }}
               disabled={connecting}
             >
-              <Text style={styles.cancelBtnText}>Annuler</Text>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.connectBtnWrapper}
@@ -268,7 +270,7 @@ export default function ServerSelectScreen() {
                 {connecting ? (
                   <ActivityIndicator size="small" color={COLORS.textPrimary} />
                 ) : (
-                  <Text style={styles.connectBtnText}>Se connecter</Text>
+                  <Text style={styles.connectBtnText}>Sign in</Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
