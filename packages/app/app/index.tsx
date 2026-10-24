@@ -14,7 +14,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useServerStore, type ServerProfile } from '../src/stores/serverStore';
@@ -23,8 +22,15 @@ import { sanitizeErrorMessage } from '../src/lib/errors';
 
 export default function ServerSelectScreen() {
   const router = useRouter();
-  const { profiles, loadProfiles, addProfile, removeProfile, authenticate, setActiveProfile } =
-    useServerStore();
+  const {
+    profiles,
+    loadProfiles,
+    addProfile,
+    removeProfile,
+    authenticate,
+    reconnect,
+    setActiveProfile,
+  } = useServerStore();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -34,13 +40,15 @@ export default function ServerSelectScreen() {
   const [connecting, setConnecting] = useState(false);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loginProfile, setLoginProfile] = useState<ServerProfile | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   useEffect(() => {
     loadProfiles();
   }, []);
 
   const handleConnect = async (profile: ServerProfile) => {
-    setActiveProfile(profile.id);
     setError(null);
     try {
       setConnecting(true);
@@ -56,20 +64,45 @@ export default function ServerSelectScreen() {
         return;
       }
 
-      // Try stored credential from SecureStore first
-      const storedCred =
-        Platform.OS === 'web'
-          ? localStorage.getItem(`cockpit_cred_${profile.id}`)
-          : await SecureStore.getItemAsync(`cockpit_cred_${profile.id}`);
-      if (!storedCred) {
-        setError('No credentials stored. Long-press to remove this profile, then add it again.');
-        return;
+      const result = await reconnect(profile.id);
+      if (result === 'connected') {
+        router.replace('/(tabs)/overview');
+      } else if (result === 'unreachable') {
+        setError(`Cannot reach ${profile.url}. Check the connection and try again.`);
+      } else if (profile.authMode === 'login') {
+        setLoginProfile(profile);
+        setLoginEmail('');
+        setLoginPassword('');
+        setShowAdd(false);
+      } else {
+        setError('API key missing or rejected. Long-press to remove this profile, then add it again.');
       }
-      await authenticate(profile.id, storedCred, { email });
-      router.replace('/(tabs)/overview');
     } catch (err) {
       console.error('[COCKPIT] handleConnect failed:', err);
       setError(sanitizeErrorMessage(err, 'Unknown connection error'));
+    } finally {
+      setConnecting(false);
+      setConnectingId(null);
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!loginProfile || !loginEmail.trim() || !loginPassword) {
+      setError('Email and password are required.');
+      return;
+    }
+
+    setError(null);
+    setConnecting(true);
+    setConnectingId(loginProfile.id);
+    try {
+      await authenticate(loginProfile.id, loginPassword, { email: loginEmail.trim() });
+      setLoginProfile(null);
+      setLoginEmail('');
+      setLoginPassword('');
+      router.replace('/(tabs)/overview');
+    } catch (err) {
+      setError(sanitizeErrorMessage(err, 'Sign-in failed.'));
     } finally {
       setConnecting(false);
       setConnectingId(null);
@@ -186,6 +219,65 @@ export default function ServerSelectScreen() {
         </View>
       ) : null}
 
+      {loginProfile ? (
+        <View style={[styles.form, styles.loginForm]}>
+          <Text style={styles.formTitle}>Sign in to {loginProfile.name}</Text>
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor={COLORS.textSecondary}
+              value={loginEmail}
+              onChangeText={setLoginEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor={COLORS.textSecondary}
+              value={loginPassword}
+              onChangeText={setLoginPassword}
+              secureTextEntry
+            />
+          </View>
+          <View style={styles.formActions}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => {
+                setLoginProfile(null);
+                setLoginEmail('');
+                setLoginPassword('');
+                setError(null);
+              }}
+              disabled={connecting}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.connectBtnWrapper}
+              onPress={handleLogin}
+              disabled={connecting}
+            >
+              <LinearGradient
+                colors={[COLORS.blue, COLORS.indigo]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.connectBtn}
+              >
+                {connecting ? (
+                  <ActivityIndicator size="small" color={COLORS.textPrimary} />
+                ) : (
+                  <Text style={styles.connectBtnText}>Sign in</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
       {profiles.length > 0 && (
         <FlatList
           data={profiles}
@@ -201,6 +293,7 @@ export default function ServerSelectScreen() {
           style={styles.addCard}
           onPress={() => {
             setShowAdd(true);
+            setLoginProfile(null);
             setError(null);
           }}
           activeOpacity={0.7}
@@ -484,6 +577,9 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
     gap: SPACING.md,
     ...SHADOW.card,
+  },
+  loginForm: {
+    marginBottom: SPACING.lg,
   },
   formTitle: {
     color: COLORS.textPrimary,
