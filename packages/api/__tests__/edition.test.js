@@ -124,8 +124,13 @@ describe("resolveRetentionDays", () => {
   });
 });
 
-describe("metricsRetentionDays cross-surface parity", () => {
-  const proSharedEdition = require("/home/bigabou/automation/projects/cockpit-pro/packages/shared/src/edition.js");
+// The parity check reads the private cockpit-pro checkout on the owner's host. CI runners and other
+// clones do not have it, so the block is skipped there instead of failing the whole suite.
+const PRO_SHARED_EDITION = "/home/bigabou/automation/projects/cockpit-pro/packages/shared/src/edition.js";
+const describeIfProCheckout = require("fs").existsSync(PRO_SHARED_EDITION) ? describe : describe.skip;
+
+describeIfProCheckout("metricsRetentionDays cross-surface parity", () => {
+  const proSharedEdition = require(PRO_SHARED_EDITION);
 
   test("CE value matches across API and cockpit-pro shared", () => {
     expect(CE_LIMITS.metricsRetentionDays).toBe(90);
