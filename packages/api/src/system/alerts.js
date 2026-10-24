@@ -192,7 +192,7 @@ function evaluateRules(metrics, containerStats) {
             resolveAlert(rule, value, existing);
           }
         } else if (inClearZone(rule, value)) {
-          if (existing.clearingSince == null) existing.clearingSince = now;
+          if (existing.clearingSince === null || existing.clearingSince === undefined) existing.clearingSince = now;
           const clearDurationMs = (rule.clear_duration_seconds || 0) * 1000;
           if (now - existing.clearingSince >= clearDurationMs) {
             resolveAlert(rule, value, existing);
@@ -247,7 +247,7 @@ function inClearZone(rule, value) {
   const isUpper = ['>', '>='].includes(rule.operator); // alert when value high
   const isLower = ['<', '<='].includes(rule.operator); // alert when value low
   if (rule.operator === '==') return value !== rule.threshold; // handled by debounce below
-  const band = rule.clear_threshold != null
+  const band = rule.clear_threshold !== null && rule.clear_threshold !== undefined
     ? rule.clear_threshold
     : (isUpper ? rule.threshold - Math.max(rule.threshold * 0.05, 1)
                : rule.threshold + Math.max(rule.threshold * 0.05, 1));
