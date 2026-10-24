@@ -188,42 +188,36 @@ router.get("/api/containers/:id/top", requireAuth, validateContainerId, async (r
 });
 
 // ── Bulk Operations ──────────────────────────────────────
-router.post(
-  "/api/containers/bulk",
-  requireAuth,
-  requireRole("admin", "operator"),
-  strictLimiter,
-  async (req, res) => {
-    try {
-      const { ids, action } = req.body;
-      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
-      if (!["start", "stop", "restart"].includes(action))
-        return res.status(400).json({ error: "action must be start, stop, or restart" });
-      if (ids.length > 20) return res.status(400).json({ error: "Max 20 containers per bulk operation" });
+router.post("/api/containers/bulk", requireAuth, requireRole("admin", "operator"), strictLimiter, async (req, res) => {
+  try {
+    const { ids, action } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
+    if (!["start", "stop", "restart"].includes(action))
+      return res.status(400).json({ error: "action must be start, stop, or restart" });
+    if (ids.length > 20) return res.status(400).json({ error: "Max 20 containers per bulk operation" });
 
-      // Validate all IDs
-      const CONTAINER_ID_RE_LOCAL = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
-      for (const id of ids) {
-        if (!CONTAINER_ID_RE_LOCAL.test(id)) return res.status(400).json({ error: `Invalid container ID: ${id}` });
-        if (id === SELF_HOSTNAME)
-          return res.status(403).json({ error: "Cannot perform this action on the Cockpit API container" });
-      }
-
-      const results = await Promise.allSettled(ids.map((id) => containers[`${action}Container`](id)));
-
-      const summary = ids.map((id, i) => ({
-        id,
-        success: results[i].status === "fulfilled",
-        error: results[i].status === "rejected" ? results[i].reason.message : null,
-      }));
-
-      auditLog(req.user.id, `container.bulk.${action}`, ids.join(","), `${ids.length} containers`);
-      res.json({ action, results: summary });
-    } catch (err) {
-      res.status(500).json({ error: safeError(err) });
+    // Validate all IDs
+    const CONTAINER_ID_RE_LOCAL = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
+    for (const id of ids) {
+      if (!CONTAINER_ID_RE_LOCAL.test(id)) return res.status(400).json({ error: `Invalid container ID: ${id}` });
+      if (id === SELF_HOSTNAME)
+        return res.status(403).json({ error: "Cannot perform this action on the Cockpit API container" });
     }
-  },
-);
+
+    const results = await Promise.allSettled(ids.map((id) => containers[`${action}Container`](id)));
+
+    const summary = ids.map((id, i) => ({
+      id,
+      success: results[i].status === "fulfilled",
+      error: results[i].status === "rejected" ? results[i].reason.message : null,
+    }));
+
+    auditLog(req.user.id, `container.bulk.${action}`, ids.join(","), `${ids.length} containers`);
+    res.json({ action, results: summary });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
 
 // ── Nuke & Rebuild ───────────────────────────────────────
 router.post(

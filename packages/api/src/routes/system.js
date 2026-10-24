@@ -155,7 +155,10 @@ function hourlyToLegacyRow(b) {
     load_1: b.load_avg,
     container_total: b.container_total_avg,
     container_running: b.container_running_avg,
-    created_at: new Date(b.t * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, ""),
+    created_at: new Date(b.t * 1000)
+      .toISOString()
+      .replace("T", " ")
+      .replace(/\.\d+Z$/, ""),
   };
 }
 
@@ -171,7 +174,7 @@ function bucketsToLegacySummary(buckets) {
   function wAvg(field) {
     if (totalSamples === 0) return null;
     const sum = buckets.reduce((s, b) => s + (b[field] ?? 0) * (b.sample_count || 1), 0);
-    return Math.round(sum / totalSamples * 100) / 100;
+    return Math.round((sum / totalSamples) * 100) / 100;
   }
   return {
     data_points: totalSamples,
@@ -248,29 +251,44 @@ router.get("/api/metrics/history", requireAuth, (req, res) => {
   // Summary is derived from the returned buckets so it always reflects the served
   // window (not the 48h raw table which only holds the last two days of data).
   const totalSamples = buckets.reduce((s, b) => s + (b.sample_count || 1), 0);
-  const bucketSummary = buckets.length === 0 ? null : {
-    data_points: buckets.length,
-    cpu_min: Math.min(...buckets.map((b) => b.cpu_min ?? b.cpu_avg)),
-    cpu_max: Math.max(...buckets.map((b) => b.cpu_max ?? b.cpu_avg)),
-    cpu_avg: totalSamples > 0
-      ? Math.round(buckets.reduce((s, b) => s + (b.cpu_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples * 100) / 100
-      : null,
-    memory_min: Math.min(...buckets.map((b) => b.memory_min ?? b.memory_avg)),
-    memory_max: Math.max(...buckets.map((b) => b.memory_max ?? b.memory_avg)),
-    memory_avg: totalSamples > 0
-      ? Math.round(buckets.reduce((s, b) => s + (b.memory_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples * 100) / 100
-      : null,
-    disk_min: Math.min(...buckets.map((b) => b.disk_min ?? b.disk_avg)),
-    disk_max: Math.max(...buckets.map((b) => b.disk_max ?? b.disk_avg)),
-    disk_avg: totalSamples > 0
-      ? Math.round(buckets.reduce((s, b) => s + (b.disk_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples * 100) / 100
-      : null,
-    load_min: Math.min(...buckets.map((b) => b.load_min ?? b.load_avg)),
-    load_max: Math.max(...buckets.map((b) => b.load_max ?? b.load_avg)),
-    load_avg: totalSamples > 0
-      ? Math.round(buckets.reduce((s, b) => s + (b.load_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples * 100) / 100
-      : null,
-  };
+  const bucketSummary =
+    buckets.length === 0
+      ? null
+      : {
+          data_points: buckets.length,
+          cpu_min: Math.min(...buckets.map((b) => b.cpu_min ?? b.cpu_avg)),
+          cpu_max: Math.max(...buckets.map((b) => b.cpu_max ?? b.cpu_avg)),
+          cpu_avg:
+            totalSamples > 0
+              ? Math.round(
+                  (buckets.reduce((s, b) => s + (b.cpu_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples) * 100,
+                ) / 100
+              : null,
+          memory_min: Math.min(...buckets.map((b) => b.memory_min ?? b.memory_avg)),
+          memory_max: Math.max(...buckets.map((b) => b.memory_max ?? b.memory_avg)),
+          memory_avg:
+            totalSamples > 0
+              ? Math.round(
+                  (buckets.reduce((s, b) => s + (b.memory_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples) * 100,
+                ) / 100
+              : null,
+          disk_min: Math.min(...buckets.map((b) => b.disk_min ?? b.disk_avg)),
+          disk_max: Math.max(...buckets.map((b) => b.disk_max ?? b.disk_avg)),
+          disk_avg:
+            totalSamples > 0
+              ? Math.round(
+                  (buckets.reduce((s, b) => s + (b.disk_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples) * 100,
+                ) / 100
+              : null,
+          load_min: Math.min(...buckets.map((b) => b.load_min ?? b.load_avg)),
+          load_max: Math.max(...buckets.map((b) => b.load_max ?? b.load_avg)),
+          load_avg:
+            totalSamples > 0
+              ? Math.round(
+                  (buckets.reduce((s, b) => s + (b.load_avg ?? 0) * (b.sample_count || 1), 0) / totalSamples) * 100,
+                ) / 100
+              : null,
+        };
 
   return res.json({
     resolution: tier,

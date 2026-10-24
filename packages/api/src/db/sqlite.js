@@ -63,8 +63,7 @@ const migrations = [
   },
   {
     version: 3,
-    description:
-      "Trend rollups — metrics_rollup_hourly/daily, app_state, idempotent metrics_history",
+    description: "Trend rollups — metrics_rollup_hourly/daily, app_state, idempotent metrics_history",
     sql: `
       CREATE TABLE IF NOT EXISTS metrics_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,7 +107,7 @@ const migrations = [
   },
   {
     version: 4,
-    description: 'alert severity + hysteresis (clear band/duration)',
+    description: "alert severity + hysteresis (clear band/duration)",
     sql: `
       CREATE TABLE IF NOT EXISTS alert_rules (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, metric TEXT NOT NULL,
