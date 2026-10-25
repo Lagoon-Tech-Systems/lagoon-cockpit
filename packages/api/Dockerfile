@@ -26,9 +26,12 @@ WORKDIR /app
 # Minimal runtime deps only. npm, npx, corepack and yarn are removed: the runtime only
 # runs `node src/index.js`, and the base image's bundled npm carried most of the image's
 # HIGH/CRITICAL findings (e.g. its own tar 6.2.1, CVE-2026-59873).
+# `apk upgrade` pulls Alpine security fixes that the node base tag has not picked up yet
+# (e.g. OpenSSL 3.5.6 -> 3.5.9 for CVE-2026-14456 and CVE-2026-45447).
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
       /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* && \
+    apk upgrade --no-cache && \
     apk add --no-cache sqlite wget && \
     addgroup -g ${DOCKER_GID} docker-host && \
     addgroup node docker-host && \
