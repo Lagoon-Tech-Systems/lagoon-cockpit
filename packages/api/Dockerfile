@@ -23,8 +23,13 @@ LABEL org.opencontainers.image.vendor="Lagoon Tech Systems"
 
 WORKDIR /app
 
-# Minimal runtime deps only
-RUN apk add --no-cache sqlite wget && \
+# Minimal runtime deps only. npm, npx, corepack and yarn are removed: the runtime only
+# runs `node src/index.js`, and the base image's bundled npm carried most of the image's
+# HIGH/CRITICAL findings (e.g. its own tar 6.2.1, CVE-2026-59873).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+      /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* && \
+    apk add --no-cache sqlite wget && \
     addgroup -g ${DOCKER_GID} docker-host && \
     addgroup node docker-host && \
     mkdir -p /app/data /app/extensions && \

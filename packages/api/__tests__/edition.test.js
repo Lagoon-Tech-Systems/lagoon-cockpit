@@ -124,9 +124,14 @@ describe("resolveRetentionDays", () => {
   });
 });
 
-describe("metricsRetentionDays cross-surface parity", () => {
-  const proSharedEdition = require("/home/bigabou/automation/projects/cockpit-pro/packages/shared/src/edition.js");
+// The parity check reads the private cockpit-pro checkout on the owner's host. CI runners and other
+// clones do not have it, so the block is skipped there instead of failing the whole suite. The require
+// stays outside the block: Jest still runs a skipped describe's body to collect its tests.
+const PRO_SHARED_EDITION = "/home/bigabou/automation/projects/cockpit-pro/packages/shared/src/edition.js";
+const proSharedEdition = require("fs").existsSync(PRO_SHARED_EDITION) ? require(PRO_SHARED_EDITION) : null;
+const describeIfProCheckout = proSharedEdition ? describe : describe.skip;
 
+describeIfProCheckout("metricsRetentionDays cross-surface parity", () => {
   test("CE value matches across API and cockpit-pro shared", () => {
     expect(CE_LIMITS.metricsRetentionDays).toBe(90);
     expect(proSharedEdition.CE_LIMITS.metricsRetentionDays).toBe(90);
