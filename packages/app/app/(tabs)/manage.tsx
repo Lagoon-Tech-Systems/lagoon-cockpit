@@ -51,10 +51,6 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'mTLS', description: 'Mutual TLS certificates', icon: 'lock-closed', iconColor: '#14b8a6', route: '/manage/mtls', section: 'monitoring', feature: 'mtls' },
   { label: 'Encryption', description: 'Data encryption at rest', icon: 'key', iconColor: '#6366f1', route: '/manage/encryption', section: 'monitoring', feature: 'encryption_at_rest' },
   { label: 'Compliance Logs', description: 'Audit trail and compliance', icon: 'document-text', iconColor: '#a855f7', route: '/manage/compliance', section: 'monitoring', feature: 'compliance_logging' },
-  /* LTS — Lagoon Tech private overlay (cockpit-lts) */
-  { label: 'Kaizen Audits', description: 'Daily dependency + SSL + cron audits', icon: 'document-text-outline', iconColor: '#22c55e', route: '/manage/kaizen-audits', section: 'monitoring' },
-  { label: 'Sentinel Live', description: 'Active alerts from the production monitor', icon: 'pulse-outline', iconColor: '#ef4444', route: '/manage/sentinel-live', section: 'monitoring' },
-  { label: 'Web Metrics', description: 'Uptime + Cloudflare zone status (7d)', icon: 'globe-outline', iconColor: '#06b6d4', route: '/manage/web-metrics', section: 'monitoring' },
   /* Operations */
   { label: 'Event Log', description: 'Windows Event Log viewer', icon: 'document-text', iconColor: COLORS.orange, route: '/manage/eventlog', section: 'operations', windowsOnly: true },
   { label: 'Activity Log', description: 'Who did what and when', icon: 'list', iconColor: COLORS.textSecondary, route: '/manage/activity', section: 'operations' },
