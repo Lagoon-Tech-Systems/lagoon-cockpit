@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        COCKPIT_VERSION: "1.0.0"
+        COCKPIT_VERSION: "2.0.0" # x-release-please-version
         COCKPIT_EDITION: "ce"
     container_name: cockpit_api
     restart: unless-stopped

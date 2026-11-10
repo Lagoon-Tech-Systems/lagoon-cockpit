@@ -63,7 +63,7 @@ export function useNotifications() {
               router.push(`/(tabs)/alerts`);
             }
           } else if (data.type === 'ssl') {
-            router.push(`/(tabs)/monitoring`);
+            router.push(`/(tabs)/alerts`);
           } else {
             // Default: go to alerts tab
             router.push(`/(tabs)/alerts`);

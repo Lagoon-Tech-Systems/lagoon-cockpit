@@ -21,8 +21,6 @@ API_KEY = _get("API_KEY")
 JWT_SECRET = _get("JWT_SECRET")
 SERVER_NAME = _get("SERVER_NAME", "Windows Server")
 PORT = int(_get("PORT", "3001"))
-MT5_BRIDGE_URL = _get("MT5_BRIDGE_URL", "http://100.85.242.40:8787")
-MT5_BRIDGE_API_KEY = _get("MT5_BRIDGE_API_KEY")
 
 # Validate required config
 if not API_KEY:
@@ -30,7 +28,4 @@ if not API_KEY:
     sys.exit(1)
 if not JWT_SECRET or JWT_SECRET == "change-me-in-production":
     print("[FATAL] JWT_SECRET must be set to a strong random value in .env")
-    sys.exit(1)
-if not MT5_BRIDGE_API_KEY:
-    print("[FATAL] MT5_BRIDGE_API_KEY must be set in .env")
     sys.exit(1)
