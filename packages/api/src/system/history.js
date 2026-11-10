@@ -143,13 +143,15 @@ function getState(key, conn = db) {
 /** Upsert a value into the generic app_state key/value table. */
 function setState(key, value, conn = db) {
   if (!conn) return;
-  conn.prepare(
-    `
+  conn
+    .prepare(
+      `
     INSERT INTO app_state (key, value)
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `,
-  ).run(key, String(value));
+    )
+    .run(key, String(value));
 }
 
 // SQL fragment shared by tick + backfill. Folds raw rows whose hour bucket is
@@ -300,12 +302,24 @@ function getTrendBuckets({ tier, fromEpoch, toEpoch }) {
       .all(fromEpoch, toEpoch);
     return rows.map((r) => ({
       t: r.t,
-      cpu_min: r.cpu_percent, cpu_max: r.cpu_percent, cpu_avg: r.cpu_percent,
-      memory_min: r.memory_percent, memory_max: r.memory_percent, memory_avg: r.memory_percent,
-      disk_min: r.disk_percent, disk_max: r.disk_percent, disk_avg: r.disk_percent,
-      load_min: r.load_1, load_max: r.load_1, load_avg: r.load_1,
-      container_total_min: r.container_total, container_total_max: r.container_total, container_total_avg: r.container_total,
-      container_running_min: r.container_running, container_running_max: r.container_running, container_running_avg: r.container_running,
+      cpu_min: r.cpu_percent,
+      cpu_max: r.cpu_percent,
+      cpu_avg: r.cpu_percent,
+      memory_min: r.memory_percent,
+      memory_max: r.memory_percent,
+      memory_avg: r.memory_percent,
+      disk_min: r.disk_percent,
+      disk_max: r.disk_percent,
+      disk_avg: r.disk_percent,
+      load_min: r.load_1,
+      load_max: r.load_1,
+      load_avg: r.load_1,
+      container_total_min: r.container_total,
+      container_total_max: r.container_total,
+      container_total_avg: r.container_total,
+      container_running_min: r.container_running,
+      container_running_max: r.container_running,
+      container_running_avg: r.container_running,
       sample_count: 1,
     }));
   }
@@ -362,7 +376,16 @@ function pruneRaw(database) {
 }
 
 module.exports = {
-  init, shutdown, recordMetrics, getHistory, getHistorySummary,
-  getState, setState, rollupTick, getTrendBuckets, runBackfill,
-  pruneRaw, RAW_RETENTION_HOURS,
+  init,
+  shutdown,
+  recordMetrics,
+  getHistory,
+  getHistorySummary,
+  getState,
+  setState,
+  rollupTick,
+  getTrendBuckets,
+  runBackfill,
+  pruneRaw,
+  RAW_RETENTION_HOURS,
 };

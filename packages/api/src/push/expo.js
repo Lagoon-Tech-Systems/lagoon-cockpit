@@ -7,19 +7,22 @@ let db = null;
 // CRITICAL pushes get their own, larger budget so a token that has already used
 // its non-critical allowance (info/warn spam) can't have a genuine CRITICAL
 // alert silently dropped behind it.
-const MAX_PUSHES_PER_WINDOW = 10;          // per token, non-critical
+const MAX_PUSHES_PER_WINDOW = 10; // per token, non-critical
 const MAX_CRITICAL_PUSHES_PER_WINDOW = 20; // per token, critical — separate bucket
-const WINDOW_MS = 60 * 60 * 1000;      // rolling 1h
-const _budget = new Map();             // token -> number[] (timestamps), non-critical
-const _criticalBudget = new Map();     // token -> number[] (timestamps), critical
+const WINDOW_MS = 60 * 60 * 1000; // rolling 1h
+const _budget = new Map(); // token -> number[] (timestamps), non-critical
+const _criticalBudget = new Map(); // token -> number[] (timestamps), critical
 
-function _resetBudget() { _budget.clear(); _criticalBudget.clear(); }
+function _resetBudget() {
+  _budget.clear();
+  _criticalBudget.clear();
+}
 
 // Severity → Expo delivery mapping (interruptionLevel / channelId / sound)
 const SEVERITY_DELIVERY = {
-  critical: { interruptionLevel: 'time-sensitive', channelId: 'cockpit-critical', sound: 'default' },
-  warn:     { interruptionLevel: 'active',         channelId: 'cockpit-default',  sound: 'default' },
-  info:     { interruptionLevel: 'passive',        channelId: 'cockpit-info',     sound: null },
+  critical: { interruptionLevel: "time-sensitive", channelId: "cockpit-critical", sound: "default" },
+  warn: { interruptionLevel: "active", channelId: "cockpit-default", sound: "default" },
+  info: { interruptionLevel: "passive", channelId: "cockpit-info", sound: null },
 };
 
 function _withinBudget(token, isCritical) {
@@ -27,8 +30,13 @@ function _withinBudget(token, isCritical) {
   const max = isCritical ? MAX_CRITICAL_PUSHES_PER_WINDOW : MAX_PUSHES_PER_WINDOW;
   const now = Date.now();
   const hits = (bucket.get(token) || []).filter((t) => now - t < WINDOW_MS);
-  if (hits.length >= max) { bucket.set(token, hits); return false; }
-  hits.push(now); bucket.set(token, hits); return true;
+  if (hits.length >= max) {
+    bucket.set(token, hits);
+    return false;
+  }
+  hits.push(now);
+  bucket.set(token, hits);
+  return true;
 }
 
 /** Initialize push module */
@@ -67,7 +75,7 @@ async function sendPushNotification(title, body, data = {}, opts = {}) {
   if (!expo || !db) return 0;
 
   const tokens = opts.userId
-    ? db.prepare('SELECT token FROM push_tokens WHERE user_id = ?').all(opts.userId)
+    ? db.prepare("SELECT token FROM push_tokens WHERE user_id = ?").all(opts.userId)
     : db.prepare("SELECT token FROM push_tokens").all();
   if (tokens.length === 0) return 0;
 

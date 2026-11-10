@@ -73,7 +73,8 @@ async function evaluateAndDetect(metrics, containerStats, allContainers) {
     // Gated inspect: only pay the Docker inspect cost for containers that look like
     // they're restarting, or that just transitioned state — never every container
     // every tick.
-    const shouldInspect = String(c.status || "").includes("Restarting") || c.state === "restarting" || (prev && prev !== c.state);
+    const shouldInspect =
+      String(c.status || "").includes("Restarting") || c.state === "restarting" || (prev && prev !== c.state);
     if (shouldInspect) {
       try {
         const inspect = await inspectContainer(c.id);

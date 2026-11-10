@@ -127,7 +127,7 @@ npx lagoon-cockpit-cli overview
 
 | Feature | Pro | Enterprise |
 |---------|-----|-----------|
-| Push Notifications | Yes | Yes |
+| Advanced Push Channels | Yes | Yes |
 | Incident Management | Yes | War Room + Postmortem |
 | Automated Remediation | 10 rules | Unlimited + Runbooks |
 | Status Pages | 3 | Unlimited + Custom Domain |
@@ -336,7 +336,7 @@ cd packages/app && npm start      # Expo dev server
 ## License
 
 Community Edition: [AGPL-3.0](LICENSE)
-CLI Tool: [MIT](packages/cli/LICENSE)
+CLI Tool: [AGPL-3.0](LICENSE)
 Pro/Enterprise: Commercial License
 
 ---

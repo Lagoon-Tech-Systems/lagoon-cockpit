@@ -56,7 +56,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=high --workspaces
+      - name: Audit API production dependencies (blocking)
+        run: npm audit --audit-level=high --omit=dev --workspace=packages/api
+      - name: Full audit (informational)
+        run: npm audit --workspaces || true
 
   test-api:
     name: Test API

@@ -48,8 +48,7 @@ function parseRequest(query) {
 
   // ── from/to (epoch seconds) ────────────────────────────
   if (from !== undefined || to !== undefined) {
-    if (from === undefined || to === undefined)
-      return badRequest("from and to are both required");
+    if (from === undefined || to === undefined) return badRequest("from and to are both required");
     const f = parseFinitePositive(from, "from");
     if (f.err) return f.err;
     const t = parseFinitePositive(to, "to");
