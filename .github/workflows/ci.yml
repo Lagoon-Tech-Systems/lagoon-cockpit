@@ -22,6 +22,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx eslint packages/api/src
       - run: npx prettier --check "packages/api/src/**/*.js"
+      - run: node scripts/check-versions.js
 
   typecheck:
     name: TypeScript Check
