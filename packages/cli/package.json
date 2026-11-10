@@ -1,6 +1,6 @@
 {
   "name": "lagoon-cockpit-cli",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "CLI companion for Lagoon Cockpit — manage Docker infrastructure from your terminal",
   "main": "src/index.js",
   "bin": {
