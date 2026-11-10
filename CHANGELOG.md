@@ -23,6 +23,10 @@
 - New `SECURITY-TRIAGE.md` ledger.
 - Operations entry for `lagoon-cockpit` added to the internal `lts-pre-deploy` matrix, documenting the canonical `packages/api/`-rooted compose layering and the known root-`docker-compose.yml` / `scripts/deploy.sh` drift.
 
+### Removed
+
+- **windows-agent:** the MT5 bridge proxy (routes /api/mt5/*) is removed. It served one private deployment.
+
 ## [2.0.0](https://github.com/Lagoon-Tech-Systems/lagoon-cockpit/compare/v1.0.0...v2.0.0) (2026-03-30)
 
 
