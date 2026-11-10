@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: EDITION === "ce" ? "Lagoon Cockpit CE" : "Lagoon Cockpit",
     slug: "lagoon-cockpit",
-    version: "2.0.0",
+    version: "2.0.0", // x-release-please-version
     orientation: "portrait",
     scheme: "lagoon-cockpit",
     userInterfaceStyle: "dark",
