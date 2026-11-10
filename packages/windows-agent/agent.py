@@ -21,8 +21,6 @@ def safe_error(exc, default_msg="Operation failed"):
     return default_msg
 
 
-from sanitize import sanitize_upstream  # noqa: F401  (re-export for back-compat)
-
 from auth.keys import authenticate_with_key
 from auth.jwt_auth import (
     validate_refresh_token, sign_access_token,
@@ -39,7 +37,6 @@ from system.services import (
 )
 from system.processes import list_processes, kill_process
 from system.eventlog import read_event_log
-from mt5.proxy import get_health as mt5_health, get_account as mt5_account, get_positions as mt5_positions
 from stream.sse import add_client, remove_client, broadcast, get_client_count, sse_stream
 
 app = Flask(__name__)
@@ -131,10 +128,6 @@ def overview():
     running_svcs = [s for s in services if s["status"] == "running"]
     stopped_svcs = [s for s in services if s["status"] == "stopped"]
 
-    # MT5 Bridge status
-    mt5_data, mt5_status = mt5_health()
-    mt5_ok = mt5_status == 200 and mt5_data.get("status") == "ok"
-
     return jsonify({
         "serverName": SERVER_NAME,
         "platform": "windows",
@@ -143,11 +136,6 @@ def overview():
             "total": len(services),
             "running": len(running_svcs),
             "stopped": len(stopped_svcs),
-        },
-        "mt5": {
-            "status": "online" if mt5_ok else "offline",
-            "balance": mt5_data.get("balance") if mt5_ok else None,
-            "equity": mt5_data.get("equity") if mt5_ok else None,
         },
         # Compatibility with mobile app's OverviewData shape
         "containers": {"total": 0, "running": 0, "stopped": 0, "unhealthy": 0},
@@ -247,29 +235,6 @@ def process_kill(pid):
         return jsonify({"ok": True, **result})
     except Exception as e:
         return jsonify({"error": safe_error(e, "Process kill failed")}), 400
-
-
-# ── MT5 Bridge Proxy ──────────────────────────────────────────────────────
-
-@app.route("/api/mt5/health")
-@require_auth
-def mt5_health_route():
-    data, status = mt5_health()
-    return jsonify(sanitize_upstream(data)), status
-
-
-@app.route("/api/mt5/account")
-@require_auth
-def mt5_account_route():
-    data, status = mt5_account()
-    return jsonify(sanitize_upstream(data)), status
-
-
-@app.route("/api/mt5/positions")
-@require_auth
-def mt5_positions_route():
-    data, status = mt5_positions()
-    return jsonify(sanitize_upstream(data)), status
 
 
 # ── Event Log ──────────────────────────────────────────────────────────────
