@@ -4,6 +4,10 @@ import * as path from 'path';
 const appDir = path.resolve(__dirname, '..', '..', 'app', '(tabs)');
 const manageSrc = fs.readFileSync(path.join(appDir, 'manage.tsx'), 'utf8');
 const layoutSrc = fs.readFileSync(path.join(appDir, '_layout.tsx'), 'utf8');
+const notificationsSrc = fs.readFileSync(
+  path.resolve(__dirname, '..', 'hooks', 'useNotifications.ts'),
+  'utf8',
+);
 
 /** Returns the text of the <Tabs.Screen ... /> element whose name is `name`. */
 function screenBlock(src: string, name: string): string {
@@ -34,5 +38,16 @@ describe('public navigation', () => {
 
   it('does not title any tab "Monitoring"', () => {
     expect(layoutSrc).not.toMatch(/title:\s*['"]Monitoring['"]/);
+  });
+
+  it('never routes a push notification to the hidden monitoring tab', () => {
+    expect(notificationsSrc).not.toContain('/(tabs)/monitoring');
+  });
+
+  it('routes ssl push notifications to the alerts tab', () => {
+    const start = notificationsSrc.indexOf("data.type === 'ssl'");
+    expect(start).toBeGreaterThan(-1);
+    const branch = notificationsSrc.slice(start, notificationsSrc.indexOf('} else', start));
+    expect(branch).toContain('router.push(`/(tabs)/alerts`)');
   });
 });
