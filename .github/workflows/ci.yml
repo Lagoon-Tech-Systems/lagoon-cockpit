@@ -81,6 +81,14 @@ jobs:
     needs: [test-api]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+      - name: Check API lockfile matches package.json
+        run: |
+          tmp=$(mktemp -d)
+          cp packages/api/package.json packages/api/package-lock.json "$tmp"/
+          cd "$tmp" && npm ci --omit=dev --ignore-scripts --dry-run
       - run: docker build --no-cache -t cockpit-api-test packages/api
       - name: Verify image runs
         run: |

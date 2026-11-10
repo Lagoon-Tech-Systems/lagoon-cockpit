@@ -1,9 +1,9 @@
 # ── Stage 1: Builder ────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN apk add --no-cache python3 make g++ sqlite-dev && \
-    npm install --omit=dev
+    npm ci --omit=dev
 COPY src/ ./src/
 
 # ── Stage 2: Runtime ───────────────────────────────────────
